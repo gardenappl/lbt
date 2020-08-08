@@ -221,6 +221,37 @@ handle_lbry_url() {
 
 
 
+
+
+prepare() {
+	lbrynet_start_if_needed
+
+
+
+	get_local_lbrynet_config
+
+
+	lbrynet_info="$(lbrynet_get "$url")"
+	#echo "$lbrynet_info"
+	case $lbrynet_info in
+		\{* ) 
+			# Assume valid JSON if starts with {
+			;;
+		* ) 
+			print_error "Error: $lbrynet_info"
+			exit 1
+			;;
+	esac
+
+
+	error="$(result_value "$lbrynet_info" "error")"
+	if [ "$error" != "null" ]; then
+		print_error "Error: $error"
+		exit 1
+	fi
+}
+
+
 lbt_print_usage() {
 	echo \
 "Available commands:
@@ -313,36 +344,13 @@ open() {
 		exit 1
 	fi
 
-	lbrynet_start_if_needed
-
 	url="$(normalize_lbry_url "$1")"
 	if [ "$url" != "$1" ]; then
-		print_info "Resolved to $url"
+		print_info "Resolving $url..."
 	fi
 
 
-	get_local_lbrynet_config
-
-
-	lbrynet_info="$(lbrynet_get "$url")"
-	#echo "$lbrynet_info"
-	case $lbrynet_info in
-		\{* ) 
-			# Assume valid JSON if starts with {
-			;;
-		* ) 
-			print_error "Error: $lbrynet_info"
-			exit 1
-			;;
-	esac
-
-
-	error="$(result_value "$lbrynet_info" "error")"
-	if [ "$error" != "null" ]; then
-		print_error "Error: $error"
-		exit 1
-	fi
-
+	prepare
 
 	mimetype=$(result_value "$lbrynet_info" "mime_type")
 
@@ -430,40 +438,35 @@ get() {
 	fi
 
 	if [ -z "$resolve" ] && [ -z "$allow_terminal" ] && [ -t 1 ]; then
-		echo "Are you sure you want to print this data into a terminal? If yes, try again with the -t option."
+		print_info "Are you sure you want to print this data into a terminal?"
+		printf_info "\n(use the --terminal option to skip this)\033[F"
+		printf_info "Type 'y' to proceed, or 'n' to exit: "
+	
+		first_print=y
+		while read result; do
+			if [ -n "$first_print" ]; then
+				printf_info '\n'
+				unset first_print
+			fi
+
+			if [ "$result" = y ]; then
+				break
+			elif [ "$result" = n ]; then
+				exit 0
+			fi
+			printf_info "Type 'y' to proceed, or 'n' to exit: "
+		done
 		exit 1
 	fi
 
-
-	lbrynet_start_if_needed
 
 	url="$(normalize_lbry_url "$1")"
 	if [ "$url" != "$1" ]; then
-		print_info "Resolved to $url"
+		print_info "Resolving $url..."
 	fi
 
 
-	get_local_lbrynet_config
-
-
-	lbrynet_info="$(lbrynet_get "$url")"
-	#echo "$lbrynet_info"
-	case $lbrynet_info in
-		\{* ) 
-			# Assume valid JSON if starts with {
-			;;
-		* ) 
-			print_error "Error: $lbrynet_info"
-			exit 1
-			;;
-	esac
-
-
-	error="$(result_value "$lbrynet_info" "error")"
-	if [ "$error" != "null" ]; then
-		print_error "Error: $error"
-		exit 1
-	fi
+	prepare
 
 
 
