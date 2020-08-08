@@ -4,14 +4,14 @@ set -o errexit
 
 
 
-config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/lbry-tools"
+config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
 
 
 mkdir -p "$config_dir"
 
 if [ ! -f "$config_dir/mimetypes" ]; then
 	echo \
-"# This file determines rules for handling different types of files using lbry-tools.
+"# This file determines rules for handling different types of files using lbt.
 # Rules are ordered by priority, the ones at the top have the highest priority.
 
 # First column is a glob pattern for matching MIME types.
