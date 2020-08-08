@@ -1,0 +1,339 @@
+#!/bin/sh
+
+set -o errexit
+
+
+
+config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/lbry-tools"
+
+
+mkdir -p "$config_dir"
+
+if [ ! -f "$config_dir/mimetypes" ]; then
+	echo \
+"# This file determines rules for handling different types of files using lbry-tools.
+# Rules are ordered by priority, the ones at the top have the highest priority.
+
+# First column is a glob pattern for matching MIME types.
+# Second column is the action: \"save\" means that the file must be downloaded before opening, \"stream\" means that the program can open the file as an HTTP stream.
+# Third column is the program to launch. \$1 is the stream URL/path to file, \$mimetype is the MIME type. Can be left empty if the second column says \"safe\"
+
+#Uncomment this if you want to open files using XDG default applications:
+#video/*	stream	gtk-launch \$(xdg-mime query default \$mimetype) \"\$1\"
+#audio/*	stream	gtk-launch \$(xdg-mime query default \$mimetype) \"\$1\"
+#*		save	gtk-launch \$(xdg-mime query default \$mimetype) \"\$1\"
+
+video/*		stream	mpv \"\$1\"
+audio/*		stream	mpv \"\$1\"
+image/*		save	imv \"\$1\"
+text/html	stream	\$BROWSER \"\$1\"
+application/pdf	save	zathura \"\$1\"
+text/markdown	save	glow -s dark \"\$1\"
+*		save" \
+	> "$config_dir/mimetypes"
+fi
+
+
+json_value() {
+	echo "$1" | jq -r ".$2"
+}
+
+result_value() {
+	echo "$1" | jq -r ".result.$2"
+}
+
+
+is_running() {
+	case "$1" in
+		{* )
+			if echo "$1" | grep -q '"is_running": true'; then
+				return 0
+			fi
+			;;
+	esac
+	return 1
+
+}
+
+lbrynet_start_if_needed() {
+	pidof "lbrynet" > /dev/null || {
+	#if [ $? -ne 0 ]; then
+		echo "Starting LBRY daemon..."
+		lbrynet start &> /dev/null & disown;
+		while sleep 0.5; do
+			lbrynet_status=$(lbrynet status)
+			if is_running "$lbrynet_status"; then
+				break
+			fi
+		done
+	#fi
+	}
+}
+
+get_local_lbrynet_config() {
+	lbrynet_config=$(lbrynet settings get)
+#	streaming_server=$(json_value "$lbrynet_config" "streaming_server")
+	api_server=$(json_value "$lbrynet_config" "api")
+#	download_dir=$(json_value "$lbrynet_config" "download_dir")
+}
+
+lbrynet_get() {
+	curl --silent -d"{\"method\": \"get\", \"params\": {\"uri\": \"$1\"}}" "$api_server"
+}
+
+lbrynet_file_save() {
+	curl --silent -d"{\"method\": \"file_save\", \"params\": {\"sd_hash\": \"$1\"}}" "$api_server"
+}
+
+
+is_download_complete() {
+	echo "$1" | grep -F '"completed": true' -q
+	return
+}
+
+#get_suggested_file_name() {
+#        echo "$lbrynet_info" | awk '/suggested_file_name/{print substr($2, 2, length($2)-3)}'
+#}
+
+print_info() {
+	>&2 echo "$@"
+	#echo "$@"
+}
+
+printf_info() {
+	>&2 printf "$@"
+}
+
+
+normalize_lbry_url() {
+	case "$1" in
+		https://lbry.tv/* | http://lbry.tv/* )
+			echo "$1" | sed 's/\:/\#/g; s|.*lbry\.tv/|lbry://|;'
+			;;
+		*)
+			echo "$1"
+			;;
+	esac
+}
+
+download() {
+	printf_info "Downloading..."
+	# suggested_file_name=$(result_value "$lbrynet_info" "suggested_file_name")
+	# echo "Suggested file name is $suggested_file_name"
+
+	sd_hash="$(result_value "$lbrynet_info" "sd_hash")"
+	# echo "$sd_hash"
+
+	while true; do
+		file_info="$(lbrynet_file_save "$sd_hash")"
+
+		blobs_total="$(result_value "$file_info" "blobs_in_stream")"
+		blobs_completed="$(result_value "$file_info" "blobs_completed")"
+		printf_info '\rDownloading... %d/%d' "$blobs_completed" "$blobs_total"
+
+
+		[ "$blobs_completed" -lt "$blobs_total" ] \
+			|| break
+		sleep 1
+	done	
+	printf_info "\n"
+	
+	result_value "$file_info" "download_path"
+}
+
+do_mimetype_action() {
+	if [ -n "$save" ]; then
+		mimetype_action="save"
+	else
+		mimetype_action=$(echo "$1" | cut -d' ' -f2)
+	fi
+
+	if [ "$mimetype_action" = "stream" ]; then
+ 		if is_download_complete "$lbrynet_info" && [ -z "$force_stream" ]; then
+			url=$(result_value "$lbrynet_info" "download_path")
+		else
+			url=$(result_value "$lbrynet_info" "streaming_url")
+		fi
+	elif [ "$mimetype_action" = "save" ]; then
+		if is_download_complete "$lbrynet_info"; then
+			url=$(result_value "$lbrynet_info" "download_path")
+		else
+			url=$(download "$3")
+		fi
+
+	else
+		print_info "Error in config file: Unknown action \"$mimetype_action\""
+		exit 1
+	fi
+
+	program=$(echo "$1" | cut -d' ' -f3- | awk "{\
+		gsub(/\\\$1/, \"$url\"); \
+		gsub(/\\\$mimetype/, \"$2\"); \
+		print \$0; \
+	}")
+	if [ -z "$program" ]; then
+		print_info "File saved to $url"
+	else
+		print_info "$program"
+		#echo "$program" | $SHELL
+		( eval "$program" )
+	fi
+}
+
+handle_lbry_url() {
+	# Ignore comments in config file and normalize whitespaces
+	sed '/^ *#/d; s/#.*//; s/\s\+/ /g' < "$1" \
+		| while read -r line; do
+			mimetype_pattern="$(echo "$line" | cut -d' ' -f1)"
+			case "$2" in
+				$mimetype_pattern) 
+					do_mimetype_action "$line" "$2" "$3"
+					return 0
+					;;
+			esac
+		done
+	return 1
+}
+
+
+
+
+lbt_print_usage() {
+	echo \
+"Available commands:
+	open 	Open LBRY content in the user's preferred application"
+}
+
+case "$1" in
+	"open")
+		lbt_command="open"
+		shift
+		;;
+	"-h"|"--help")
+		echo "Usage: lbt COMMAND ..."
+		lbt_print_usage
+		exit 0
+		;;
+	"")
+		echo "Usage: lbt COMMAND ..."	
+		lbt_print_usage
+		exit 1
+		;;
+	*)
+		echo "Unknown command: $1"
+		lbt_print_usage
+		exit 1
+		;;
+esac
+
+
+open() {
+	options=mhsS
+	longopts=get-mime,help,save,force-stream
+	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
+	eval set -- "$parsed"
+#	echo "$@"
+
+	while true; do
+		case "$1" in
+			-h|--help)
+				help=y
+				shift
+				;;
+			-m|--get-mime)
+				get_mimetype=y
+				shift
+				;;
+			-s|--save)
+				save=y
+				shift
+				;;
+			-S|--force-stream)
+				force_stream=y
+				shift
+				;;
+			--)
+				shift
+				break
+				;;
+			*)
+				echo "Programming error"
+				echo "$1"
+				exit 1
+				;;
+		esac
+	done
+
+
+
+	if [ -n "$help" ]; then
+		echo \
+	"Usage: lbt open URL [options...]
+
+		-h, --help 		Print help
+		-m, --get-mime 		Get MIME type of the LBRY content and exit
+		-s, --save 		Save content even if it can be streamed
+		-S, --force-stream 	Use HTTP stream even if the file is saved on this machine"
+		exit 0
+	fi
+
+
+
+	if [ -z "$1" ]; then
+		echo "Usage: lbt open URL [option...]"
+		echo "Try 'lbt open --help' to get more information"
+		exit 1
+	fi
+
+	lbrynet_start_if_needed
+
+	url="$(normalize_lbry_url "$1")"
+	if [ "$url" != "$1" ]; then
+		print_info "Resolved to $url"
+	fi
+
+
+	get_local_lbrynet_config
+
+
+	lbrynet_info="$(lbrynet_get "$url")"
+	#echo "$lbrynet_info"
+	case $lbrynet_info in
+		{* ) 
+			# Assume valid JSON if starts with {
+			;;
+		* ) 
+			print_info "Error: $lbrynet_info"
+			exit 1
+			;;
+	esac
+
+
+	error="$(result_value "$lbrynet_info" "error")"
+	if [ "$error" != "null" ]; then
+		print_info "Error: $error"
+		exit 1
+	fi
+
+
+	mimetype=$(result_value "$lbrynet_info" "mime_type")
+
+	if [ -n "$get_mimetype" ]; then
+		echo "MIME type is $mimetype"
+		exit 0
+	fi
+
+	handle_lbry_url "$config_dir/mimetypes" "$mimetype" "$url"
+}
+
+
+case "$lbt_command" in
+	"open")
+		open "$@"
+		;;
+	*)
+		echo "Programming error: unknown command??"
+		exit 1
+		;;
+esac
+
