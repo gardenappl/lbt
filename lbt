@@ -443,7 +443,7 @@ get() {
 		printf_info "Type 'y' to proceed, or 'n' to exit: "
 	
 		first_print=y
-		while read result; do
+		while read -r result; do
 			if [ -n "$first_print" ]; then
 				printf_info '\n'
 				unset first_print
