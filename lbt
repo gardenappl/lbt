@@ -45,7 +45,8 @@ result_value() {
 
 is_running() {
 	case "$1" in
-		{* )
+		\{* )
+			#If starts with {, assume valid JSON
 			if echo "$1" | grep -q '"is_running": true'; then
 				return 0
 			fi
@@ -56,18 +57,17 @@ is_running() {
 }
 
 lbrynet_start_if_needed() {
-	pidof "lbrynet" > /dev/null || {
-	#if [ $? -ne 0 ]; then
-		echo "Starting LBRY daemon..."
-		lbrynet start &> /dev/null & disown;
+	if ! pidof "lbrynet" > /dev/null; then
+		printf_info "Starting LBRY daemon... "
+		lbrynet start 2>/dev/null > /dev/null &
 		while sleep 0.5; do
 			lbrynet_status=$(lbrynet status)
 			if is_running "$lbrynet_status"; then
+				print_info "Done."
 				break
 			fi
 		done
-	#fi
-	}
+	fi
 }
 
 get_local_lbrynet_config() {
@@ -98,6 +98,11 @@ is_download_complete() {
 print_info() {
 	>&2 echo "$@"
 	#echo "$@"
+}
+
+print_error() {
+	#>&2 printf '\e[1;31m'"$@"'\e[0m\n' 
+	>&2 echo "$@"
 }
 
 printf_info() {
@@ -141,30 +146,43 @@ download() {
 	result_value "$file_info" "download_path"
 }
 
-do_mimetype_action() {
-	if [ -n "$save" ]; then
-		mimetype_action="save"
-	else
-		mimetype_action=$(echo "$1" | cut -d' ' -f2)
-	fi
-
-	if [ "$mimetype_action" = "stream" ]; then
- 		if is_download_complete "$lbrynet_info" && [ -z "$force_stream" ]; then
-			url=$(result_value "$lbrynet_info" "download_path")
-		else
-			url=$(result_value "$lbrynet_info" "streaming_url")
-		fi
-	elif [ "$mimetype_action" = "save" ]; then
+lbry_get_url() {
+	if [ "$1" = "stream" ]; then
+		result_value "$lbrynet_info" "streaming_url"
+	elif [ "$1" = "save" ]; then
 		if is_download_complete "$lbrynet_info"; then
-			url=$(result_value "$lbrynet_info" "download_path")
+			result_value "$lbrynet_info" "download_path"
 		else
-			url=$(download "$3")
+			download "$2"
 		fi
-
 	else
-		print_info "Error in config file: Unknown action \"$mimetype_action\""
+		print_info "Unknown action: $1"
 		exit 1
 	fi
+}
+
+do_mimetype_action() {
+	mimetype_action=$(echo "$1" | cut -d' ' -f2)
+
+	if [ -n "$save" ]; then
+		action="save"
+		if [ -n "$force_stream" ]; then
+			print_info "Can't use --save-file and --force-stream options at the same time"
+			exit 1
+		fi
+	elif [ -n "$force_stream" ]; then
+		action="stream"
+	else
+		if [ "$mimetype_action" = "stream" ] && is_download_complete "$lbrynet_info"; then
+			action="save"
+		else
+			action="$mimetype_action"
+		fi
+	fi
+
+
+	url=$(lbry_get_url "$action" "$3")
+
 
 	program=$(echo "$1" | cut -d' ' -f3- | awk "{\
 		gsub(/\\\$1/, \"$url\"); \
@@ -172,7 +190,11 @@ do_mimetype_action() {
 		print \$0; \
 	}")
 	if [ -z "$program" ]; then
-		print_info "File saved to $url"
+		if [ "$mimetype_action" = "save" ]; then
+			print_info "File saved to $url"
+		else
+			print_error 'Error: MIME type action is set to "stream" yet program is empty'
+		fi
 	else
 		print_info "$program"
 		#echo "$program" | $SHELL
@@ -201,12 +223,17 @@ handle_lbry_url() {
 lbt_print_usage() {
 	echo \
 "Available commands:
+	get 	Get content from an LBRY URL
 	open 	Open LBRY content in the user's preferred application"
 }
 
 case "$1" in
 	"open")
 		lbt_command="open"
+		shift
+		;;
+	"get")
+		lbt_command="get"
 		shift
 		;;
 	"-h"|"--help")
@@ -228,8 +255,8 @@ esac
 
 
 open() {
-	options=mhsS
-	longopts=get-mime,help,save,force-stream
+	options=mhfs
+	longopts=get-mime,help,save-file,force-stream
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
 #	echo "$@"
@@ -244,11 +271,11 @@ open() {
 				get_mimetype=y
 				shift
 				;;
-			-s|--save)
+			-f|--save-file)
 				save=y
 				shift
 				;;
-			-S|--force-stream)
+			-s|--force-stream)
 				force_stream=y
 				shift
 				;;
@@ -268,12 +295,12 @@ open() {
 
 	if [ -n "$help" ]; then
 		echo \
-	"Usage: lbt open URL [options...]
+"Usage: lbt open URL [options...]
 
-		-h, --help 		Print help
-		-m, --get-mime 		Get MIME type of the LBRY content and exit
-		-s, --save 		Save content even if it can be streamed
-		-S, --force-stream 	Use HTTP stream even if the file is saved on this machine"
+	-f, --save-file 	Save content as a file even if it can be streamed
+	-h, --help 		Print help
+	-m, --get-mime 		Get MIME type of the LBRY content and exit
+	-s, --force-stream 	Use HTTP stream even if the file is saved on this machine"
 		exit 0
 	fi
 
@@ -299,11 +326,11 @@ open() {
 	lbrynet_info="$(lbrynet_get "$url")"
 	#echo "$lbrynet_info"
 	case $lbrynet_info in
-		{* ) 
+		\{* ) 
 			# Assume valid JSON if starts with {
 			;;
 		* ) 
-			print_info "Error: $lbrynet_info"
+			print_error "Error: $lbrynet_info"
 			exit 1
 			;;
 	esac
@@ -311,7 +338,7 @@ open() {
 
 	error="$(result_value "$lbrynet_info" "error")"
 	if [ "$error" != "null" ]; then
-		print_info "Error: $error"
+		print_error "Error: $error"
 		exit 1
 	fi
 
@@ -327,11 +354,149 @@ open() {
 }
 
 
+
+get() {
+	options=rhfst
+	longopts=resolve,help,file,stream,terminal
+	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
+	eval set -- "$parsed"
+#	echo "$@"
+	
+	while true; do
+		case "$1" in
+			-h|--help)
+				help=y
+				shift
+				;;
+			-r|--resolve)
+				resolve=y
+				shift
+				;;
+			-f|--file)
+				save=y
+				shift
+				;;
+			-s|--stream)
+				force_stream=y
+				shift
+				;;
+			-t|--terminal)
+				allow_terminal=y
+				shift
+				;;
+			--)
+				shift
+				break
+				;;
+			*)
+				echo "Programming error: unknown parameter $1"
+				exit 1
+				;;
+		esac
+	done
+
+	if [ -n "$help" ]; then
+		echo \
+"Usage: lbt get URL [options...]
+
+	-f, --file	Save content as a file and print download path
+	-h, --help	Print help
+	-r, --resolve	Instead of printing file to stdout, print either an HTTP URL or a local file path
+	-s, --stream	Create HTTP stream and print its URL
+	-t, --terminal 	Enable printing output to the terminal"
+	fi
+
+	if [ -z "$1" ]; then
+		echo "Usage: lbt get URL -f|-s [option...]"
+		echo "Try 'lbt get --help' to get more information"
+		exit 1
+	fi
+
+
+	if [ -n "$save" ]; then
+		action="save"
+		if [ -n "$force_stream" ]; then
+			print_error "Error: --file and --stream options cannot be used at the same time."
+			exit 1
+		fi
+	elif [ -n "$force_stream" ]; then
+		action="stream"
+	else
+		if [ -n "$resolve" ]; then
+			print_error "Error: either --file or --stream option must be used with --resolve"
+			exit 1
+		fi
+	fi
+
+	if [ -z "$resolve" ] && [ -z "$allow_terminal" ] && [ -t 1 ]; then
+		echo "Are you sure you want to print this data into a terminal? If yes, try again with the -t option."
+		exit 1
+	fi
+
+
+	lbrynet_start_if_needed
+
+	url="$(normalize_lbry_url "$1")"
+	if [ "$url" != "$1" ]; then
+		print_info "Resolved to $url"
+	fi
+
+
+	get_local_lbrynet_config
+
+
+	lbrynet_info="$(lbrynet_get "$url")"
+	#echo "$lbrynet_info"
+	case $lbrynet_info in
+		\{* ) 
+			# Assume valid JSON if starts with {
+			;;
+		* ) 
+			print_error "Error: $lbrynet_info"
+			exit 1
+			;;
+	esac
+
+
+	error="$(result_value "$lbrynet_info" "error")"
+	if [ "$error" != "null" ]; then
+		print_error "Error: $error"
+		exit 1
+	fi
+
+
+
+	if [ -n "$resolve" ]; then
+		lbry_get_url "$action" "$url"
+		exit 0
+	fi
+
+	if [ -z "$action" ]; then
+		if is_download_complete "$lbrynet_info"; then
+			cat "$(result_value "$lbrynet_info" "download_path")"
+		else
+			curl --silent "$(result_value "$lbrynet_info" "streaming_url")"
+		fi
+	elif [ "$action" = "save" ]; then
+		if ! is_download_complete "$lbrynet_info"; then
+			cat "$(download "$url")"
+		else
+			cat "$(result_value "$lbrynet_info" "download_path")"
+		fi
+	elif [ "$action" = "stream" ]; then
+		curl --silent "$(result_value "$lbrynet_info" "streaming_url")"
+	fi
+}
+
+
 case "$lbt_command" in
-	"open")
+	open )
 		open "$@"
 		;;
-	*)
+	get )
+		get "$@"
+		;;
+	* )
 		echo "Programming error: unknown command??"
 		exit 1
 		;;
