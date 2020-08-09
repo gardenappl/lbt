@@ -114,7 +114,10 @@ printf_info() {
 normalize_lbry_url() {
 	case "$1" in
 		https://lbry.tv/* | http://lbry.tv/* )
-			echo "$1" | sed 's/\:/\#/g; s|.*lbry\.tv/|lbry://|;'
+			echo "$1" | sed 's/\:/\#/g; s|.*lbry\.tv/|lbry://|'
+			;;
+		https://open.lbry.com/* | http://open.lbry.com/* )
+			echo "$1" | sed 's/\:/\#/g; s|.*lbry\.com/|lbry://|'
 			;;
 		*)
 			echo "$1"
@@ -225,8 +228,6 @@ handle_lbry_url() {
 
 prepare() {
 	lbrynet_start_if_needed
-
-
 
 	get_local_lbrynet_config
 
@@ -456,7 +457,6 @@ get() {
 			fi
 			printf_info "Type 'y' to proceed, or 'n' to exit: "
 		done
-		exit 1
 	fi
 
 
