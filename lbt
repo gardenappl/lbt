@@ -19,10 +19,10 @@ if [ ! -f "$config_dir/mimetypes" ]; then
 # Third column is the program to launch. \$1 is the stream URL/path to file, \$mimetype is the MIME type. Can be left empty if the second column says \"safe\"
 
 #Uncomment this if you want to open files using XDG default applications:
-#video/*	stream	gtk-launch \$(xdg-mime query default \$mimetype) \"\$1\"
-#audio/*	stream	gtk-launch \$(xdg-mime query default \$mimetype) \"\$1\"
-#text/html	stream	gtk-launch \$(xdg-mime query default \$mimetype) \"\$1\"
-#*		save	gtk-launch \$(xdg-mime query default \$mimetype) \"\$1\"
+#video/*	stream	xdg-open \"\$1\"
+#audio/*	stream	xdg-open \"\$1\"
+#text/html	stream	xdg-open \"\$1\"
+#*		save	xdg-open \"\$1\"
 
 video/*		stream	mpv \"\$1\"
 audio/*		stream	mpv \"\$1\"
@@ -214,11 +214,10 @@ handle_lbry_url() {
 			case "$2" in
 				$mimetype_pattern) 
 					do_mimetype_action "$line" "$2" "$3"
-					return 0
+					exit 0
 					;;
 			esac
 		done
-	return 1
 }
 
 
