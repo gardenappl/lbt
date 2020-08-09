@@ -18,7 +18,7 @@ All these tools support lbry:// protocol URLs, as well as [lbry.tv](https://lbry
 
 ### lbt open
 
-**lbt open** uses its own configuration file to determine how to open LBRY URLs: which program to use, whether or not the program supports streaming, etc. By default, it uses more minimalist software to open files, falling back on XDG default applications if it doesn't recognise the file type.
+**lbt open** uses its own configuration file to determine how to open LBRY URLs: which program to use, whether or not the program supports streaming, etc. By default, it uses more minimalist software for specific file formats (video, audio, etc) or just saves them into your downloads folder if it doesn't recognise the file type.
 
 Example of usage (with the default configuration):
 
@@ -45,7 +45,7 @@ image/*		save	imv "$1"
 text/html	stream	$BROWSER "$1"
 application/pdf	save	zathura "$1"
 text/markdown	save	glow -s dark "$1"
-*		save
+*		save 		# empty third column means "save to downloads directory"
 ```
 
 The simplest way to find out the MIME type is with the program's `--get-mime` parameter, for example:
