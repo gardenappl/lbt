@@ -13,7 +13,7 @@ All these tools support lbry:// protocol URLs, as well as [lbry.tv](https://lbry
 
 **lbt** might be useful if:
 
-* You don't want to use the official Electron app (which some might call "bloated") or the lbry.tv web interface.
+* You don't want to use the official Electron app or the lbry.tv web interface (which some might call "bloated").
 * You want to work with LBRY content in your own shell scripts but don't want to mess with JSON output.
 
 ### lbt open
