@@ -3,7 +3,7 @@
 set -o errexit
 
 
-
+lbrynet_local=y
 config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
 
 
@@ -81,7 +81,7 @@ lbrynet_get() {
 	curl --silent -d"{\"method\": \"get\", \"params\": {\"uri\": \"$1\"}}" "$api_server"
 }
 
-lbrynet_file_save() {
+lbrynet_sd_save() {
 	curl --silent -d"{\"method\": \"file_save\", \"params\": {\"sd_hash\": \"$1\"}}" "$api_server"
 }
 
@@ -96,7 +96,9 @@ is_download_complete() {
 #}
 
 print_info() {
-	>&2 echo "$@"
+	if [ -z "$quiet" ]; then
+		>&2 echo "$@"
+	fi
 	#echo "$@"
 }
 
@@ -106,7 +108,9 @@ print_error() {
 }
 
 printf_info() {
-	>&2 printf "$@"
+	if [ -z "$quiet" ]; then
+		>&2 printf "$@"
+	fi
 }
 
 
@@ -124,6 +128,11 @@ normalize_lbry_url() {
 	esac
 }
 
+request_download() {
+	sd_hash="$(result_value "$lbrynet_info" "sd_hash")"
+	lbrynet_sd_save "$sd_hash"
+}
+
 download() {
 	printf_info "Downloading..."
 	# suggested_file_name=$(result_value "$lbrynet_info" "suggested_file_name")
@@ -133,7 +142,7 @@ download() {
 	# echo "$sd_hash"
 
 	while true; do
-		file_info="$(lbrynet_file_save "$sd_hash")"
+		file_info="$(lbrynet_sd_save "$sd_hash")"
 
 		blobs_total="$(result_value "$file_info" "blobs_in_stream")"
 		blobs_completed="$(result_value "$file_info" "blobs_completed")"
@@ -148,6 +157,7 @@ download() {
 	
 	result_value "$file_info" "download_path"
 }
+
 
 lbry_get_url() {
 	if [ "$1" = "stream" ]; then
@@ -331,6 +341,7 @@ open() {
 	-f, --save-file 	Save content as a file even if it can be streamed
 	-h, --help 		Print help
 	-m, --get-mime 		Get MIME type of the LBRY content and exit
+	-q, --quiet 		Don't output extra information, besides error messages
 	-s, --force-stream 	Use HTTP stream even if the file is saved on this machine"
 		exit 0
 	fi
@@ -363,9 +374,39 @@ open() {
 
 
 
+
+output_to_file() {
+	if [ "$lbrynet_local" = y ] && is_download_complete "$2"; then
+		download_path=$(result_value "$2" "download_path")
+		if [ -n "$force_save" ]; then
+			if [ -z "$quiet" ]; then
+				printf "Copying from %s... " "$download_path"
+			fi
+			cp "$download_path" "$1"
+			if [ -z "$quiet" ]; then
+				echo "Done."
+			fi
+		else
+			ln -s "$download_path" "$1"
+			if [ -z "$quiet" ]; then
+				echo "Created symlink from $1 to $download_path"
+			fi
+		fi
+		exit 0
+	fi
+	if [ -n "$quiet" ]; then
+		curl_initial_args="--silent"
+	else
+		curl_initial_args="--progress-meter"
+	fi
+	curl "$curl_initial_args" "$(result_value "$2" "streaming_url")" -o "$1"
+	exit 0
+}
+
+
 get() {
-	options=rhfst
-	longopts=resolve,help,file,stream,terminal
+	options=rhfsto:Fq
+	longopts=resolve,help,file,stream,terminal,output:,force-save,quiet
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
 #	echo "$@"
@@ -392,6 +433,18 @@ get() {
 				allow_terminal=y
 				shift
 				;;
+			-o|--output)
+				output_file="$2"
+				shift 2
+				;;
+			-F|--force-save)
+				force_save=y
+				shift
+				;;
+			-q|--quiet)
+				quiet=y
+				shift
+				;;
 			--)
 				shift
 				break
@@ -407,11 +460,18 @@ get() {
 		echo \
 "Usage: lbt get URL [options...]
 
-	-f, --file	Save content as a file and print download path
-	-h, --help	Print help
-	-r, --resolve	Instead of printing file to stdout, print either an HTTP URL or a local file path
-	-s, --stream	Create HTTP stream and print its URL
-	-t, --terminal 	Enable printing output to the terminal"
+	-f, --file		Save content as a file and print download path
+	-F, --force-save 	Save content as a file even if that's not needed
+	-h, --help		Print help
+	-O, --output FILE 	Write output to FILE (or, if the content already exists on the local machine, create a sym-link)
+	-q, --quiet 		Don't output extra information, besides error messages
+	-r, --resolve		Instead of printing file to stdout, print either an HTTP URL or a local file path
+	-s, --stream		Create HTTP stream and print its URL
+	-t, --terminal		Enable printing output to the terminal"
+	fi
+
+	if [ -n "$quiet" ]; then
+		allow_terminal=y
 	fi
 
 	if [ -z "$1" ]; then
@@ -421,14 +481,31 @@ get() {
 	fi
 
 
+	if [ -n "$output_file" ]; then
+		if [ -n "$resolve" ]; then
+			print_error "Error: --output and --resolve are incompatible options"
+			exit 1
+		fi
+	fi
+
+
+
 	if [ -n "$save" ]; then
 		action="save"
 		if [ -n "$force_stream" ]; then
 			print_error "Error: --file and --stream options cannot be used at the same time."
 			exit 1
 		fi
+		if [ -z "$resolve" ]; then
+			print_error "Error: --file option must be used with --resolve"
+			exit 1
+		fi
 	elif [ -n "$force_stream" ]; then
 		action="stream"
+		if [ -z "$resolve" ]; then
+			print_error "Error: --stream option must be used with --resolve"
+			exit 1
+		fi
 	else
 		if [ -n "$resolve" ]; then
 			print_error "Error: either --file or --stream option must be used with --resolve"
@@ -436,7 +513,7 @@ get() {
 		fi
 	fi
 
-	if [ -z "$resolve" ] && [ -z "$allow_terminal" ] && [ -t 1 ]; then
+	if [ -z "$resolve" ] && [ -z "$output_file" ] && [ -z "$allow_terminal" ] && [ -t 1 ]; then
 		print_info "Are you sure you want to print this data into a terminal?"
 		printf_info "\n(use the --terminal option to skip this)\033[F"
 		printf_info "Type 'y' to proceed, or 'n' to exit: "
@@ -468,25 +545,26 @@ get() {
 
 
 
-	if [ -n "$resolve" ]; then
+	if [ -n "$output_file" ]; then
+		output_to_file "$output_file" "$lbrynet_info"
+	elif [ -n "$resolve" ]; then
 		lbry_get_url "$action" "$url"
-		exit 0
-	fi
-
-	if [ -z "$action" ]; then
-		if is_download_complete "$lbrynet_info"; then
-			cat "$(result_value "$lbrynet_info" "download_path")"
-		else
+	else
+		if [ -z "$action" ]; then
+			if is_download_complete "$lbrynet_info"; then
+				cat "$(result_value "$lbrynet_info" "download_path")"
+			else
+				curl --silent "$(result_value "$lbrynet_info" "streaming_url")"
+			fi
+		elif [ "$action" = "save" ]; then
+			if ! is_download_complete "$lbrynet_info"; then
+				cat "$(download "$url")"
+			else
+				cat "$(result_value "$lbrynet_info" "download_path")"
+			fi
+		elif [ "$action" = "stream" ]; then
 			curl --silent "$(result_value "$lbrynet_info" "streaming_url")"
 		fi
-	elif [ "$action" = "save" ]; then
-		if ! is_download_complete "$lbrynet_info"; then
-			cat "$(download "$url")"
-		else
-			cat "$(result_value "$lbrynet_info" "download_path")"
-		fi
-	elif [ "$action" = "stream" ]; then
-		curl --silent "$(result_value "$lbrynet_info" "streaming_url")"
 	fi
 }
 
