@@ -296,8 +296,8 @@ esac
 
 
 open() {
-	options=mhfs
-	longopts=get-mime,help,save-file,force-stream
+	options=mhfsq
+	longopts=get-mime,help,save-file,force-stream,quiet
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
 #	echo "$@"
@@ -318,6 +318,10 @@ open() {
 				;;
 			-s|--force-stream)
 				force_stream=y
+				shift
+				;;
+			-q|--quiet)
+				quiet=y
 				shift
 				;;
 			--)
