@@ -2,10 +2,11 @@
 
 **lbt** is a collection of command-line tools for interacting with the LBRY network. At the moment, these are written in POSIX shell, however I'm considering rewriting them in Python at some point.
 
-Currently, there are two tools available:
+Currently, there are three tools available:
 
 * **lbt open** will open LBRY content in the user's preferred application. (think *xdg-open but for LBRY*)
 * **lbt get** will simply fetch LBRY content and output it, either into a file or into standard output. (think *wget but for LBRY*)
+* **lbt ls** will list all LBRY content that's saved on this system.
 
 All these tools support lbry:// protocol URLs, as well as [lbry.tv](https://lbry.tv) and [open.lbry.com](https://open.lbry.com) links.
 
