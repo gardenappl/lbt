@@ -22,38 +22,37 @@ All these tools support lbry:// protocol URLs, as well as [lbry.tv](https://lbry
 
 Example of usage (with the default configuration):
 
-`lbt open "lbry://@lbrytech#19/ieee#e"`
+`lbt open "lbry://@BrodieRobertson#5/easy-motion-how-did-i-use-vim-until-now#9"`
 
-opens [this video](https://open.lbry.com/@lbrytech:19/ieee:e) in MPV, as a stream.
+opens [this video](https://open.lbry.com/@BrodieRobertson:5/easy-motion-how-did-i-use-vim-until-now:9) in MPV, as a stream.
 
-`lbt open "https://lbry.tv/@grin:4/keep-it-simple:4"`
+`lbt open "https://open.lbry.com/@lbry:3f/Jeremy-LBRY-Inc-AMA:4"`
 
-downloads [this blog post](https://lbry.tv/@grin:4/keep-it-simple:4) and opens it using [Glow](https://github.com/charmbracelet/glow).
+downloads [this GIF](https://open.lbry.com/@lbry:3f/Jeremy-LBRY-Inc-AMA:4) and opens it using [imv](https://github.com/eXeC64/imv).
 
 This behaviour can be changed using a simple config file, namely `~/.config/lbt/mimetypes`. It is based on the file's [MIME type](https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types).
 
 ```
 #Uncomment this if you want to open files using XDG default applications:
-#video/*	stream	xdg-open "$1"
-#audio/*	stream	xdg-open "$1"
-#text/html	stream	xdg-open "$1"
-#*		save	xdg-open "$1"
+#video/*	stream	gtk-launch $(xdg-mime query default $mimetype) "$1"
+#audio/*	stream	gtk-launch $(xdg-mime query default $mimetype) "$1"
+#text/html	stream	gtk-launch $(xdg-mime query default $mimetype) "$1"
+#*		save	gtk-launch $(xdg-mime query default $mimetype) "$1"
 
 video/*		stream	mpv "$1"
 audio/*		stream	mpv "$1"
 image/*		save	imv "$1"
 text/html	stream	$BROWSER "$1"
 application/pdf	save	zathura "$1"
-text/markdown	save	glow -s dark "$1"
 *		save 		# empty third column means "save to downloads directory"
 ```
 
-The simplest way to find out the MIME type is with the program's `--get-mime` parameter, for example:
+The config file is automatically generated on the first run. The simplest way to find out the MIME type is with the program's `--get-mime` parameter, for example:
 
 ```
-> lbt open -m "https://open.lbry.com/@ChrisWereDigital:2/youtube-vs-peertube-thoughts-on-peertube:8"
-Resolving lbry://@ChrisWereDigital#2/youtube-vs-peertube-thoughts-on-peertube#8...
-MIME type is video/mp4
+> lbt open -m "https://lbry.tv/@grin:4/keep-it-simple:4"
+Resolving lbry://@grin#4/keep-it-simple#4...
+MIME type is text/markdown
 ```
 
 ### lbt get
