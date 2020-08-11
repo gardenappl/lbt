@@ -34,6 +34,45 @@ application/pdf	save	zathura \"\$1\"
 fi
 
 
+lbt_help_open() {
+	echo \
+"Usage: lbt open URL [options...]
+
+	-f, --save-file 	Save content as a file even if it can be streamed
+	-h, --help 		Print help
+	-m, --get-mime 		Get MIME type of the LBRY content and exit
+	-q, --quiet 		Don't output extra information, besides error messages
+	-s, --force-stream 	Use HTTP stream even if the file is saved on this machine"
+}
+
+lbt_help_ls() {
+	echo \
+"Usage: lbt ls [options...]
+
+	-c, --channel 		List channel name
+	-f, --files 		Only list content that's saved as a local file
+	-F, --not-files 	Only list content that's not saved as a local file
+	-h, --help 		Print help
+	-H, --sd-hash 		List stream hash
+	-P, --absolute-path 	List absolute paths instead of relative
+	-n, --no-path 		Don't list file paths"
+}
+
+lbt_help_get() {
+	echo \
+"Usage: lbt get URL [options...]
+
+	-f, --file		Save content as a file and print download path
+	-F, --force-save 	Save content as a file even if that's not needed
+	-h, --help		Print help
+	-O, --output FILE 	Write output to FILE (or, if the content already exists on the local machine, create a sym-link)
+	-q, --quiet 		Don't output extra information, besides error messages
+	-r, --resolve		Instead of printing file to stdout, print either an HTTP URL or a local file path
+	-s, --stream		Create HTTP stream and print its URL
+	-t, --terminal		Enable printing output to the terminal"
+}
+
+
 json_value() {
 	echo "$1" | jq -r ".$2"
 }
@@ -41,6 +80,43 @@ json_value() {
 result_value() {
 	echo "$1" | jq -r ".result.$2"
 }
+
+# from dylanaraps' Pure Sh Bible, MIT License
+trim_quotes() {
+
+	# Disable globbing.
+	# This makes the word-splitting below safe.
+	set -f
+
+	# Store the current value of 'IFS' so we
+	# can restore it later.
+	old_ifs=$IFS
+
+	# Set 'IFS' to ["'].
+	IFS=\"\'
+
+	# Create an argument list, splitting the
+	# string at ["'].
+	#
+	# Disable this shellcheck error as it only
+	# warns about word-splitting which we expect.
+	# shellcheck disable=2086
+	set -- $1
+
+	# Set 'IFS' to blank to remove spaces left
+	# by the removal of ["'].
+	IFS=
+
+	# Print the quote-less string.
+	printf '%s' "$*"
+
+	# Restore the value of 'IFS'.
+	IFS=$old_ifs
+
+	# Re-enable globbing.
+	set +f
+}
+
 
 
 is_running() {
@@ -265,34 +341,9 @@ lbt_print_usage() {
 	echo \
 "Available commands:
 	get 	Get content from an LBRY URL
+	ls 	List stored LBRY content
 	open 	Open LBRY content in the user's preferred application"
 }
-
-case "$1" in
-	"open")
-		lbt_command="open"
-		shift
-		;;
-	"get")
-		lbt_command="get"
-		shift
-		;;
-	"-h"|"--help")
-		echo "Usage: lbt COMMAND ..."
-		lbt_print_usage
-		exit 0
-		;;
-	"")
-		echo "Usage: lbt COMMAND ..."	
-		lbt_print_usage
-		exit 1
-		;;
-	*)
-		echo "Unknown command: $1"
-		lbt_print_usage
-		exit 1
-		;;
-esac
 
 
 open() {
@@ -339,14 +390,7 @@ open() {
 
 
 	if [ -n "$help" ]; then
-		echo \
-"Usage: lbt open URL [options...]
-
-	-f, --save-file 	Save content as a file even if it can be streamed
-	-h, --help 		Print help
-	-m, --get-mime 		Get MIME type of the LBRY content and exit
-	-q, --quiet 		Don't output extra information, besides error messages
-	-s, --force-stream 	Use HTTP stream even if the file is saved on this machine"
+		lbt_help_open
 		exit 0
 	fi
 
@@ -461,17 +505,7 @@ get() {
 	done
 
 	if [ -n "$help" ]; then
-		echo \
-"Usage: lbt get URL [options...]
-
-	-f, --file		Save content as a file and print download path
-	-F, --force-save 	Save content as a file even if that's not needed
-	-h, --help		Print help
-	-O, --output FILE 	Write output to FILE (or, if the content already exists on the local machine, create a sym-link)
-	-q, --quiet 		Don't output extra information, besides error messages
-	-r, --resolve		Instead of printing file to stdout, print either an HTTP URL or a local file path
-	-s, --stream		Create HTTP stream and print its URL
-	-t, --terminal		Enable printing output to the terminal"
+		lbt_help_get
 	fi
 
 	if [ -n "$quiet" ]; then
@@ -573,12 +607,218 @@ get() {
 }
 
 
+lbrynet_list_files() {
+	page=1
+	total_pages=1
+	#_ls_path="${ls_path:-$ls_relative_path}"
+	_ls_channel="$ls_channel"
+	_ls_sd_hash="$ls_sd_hash"
+	columns="n: .claim_name, p: .download_path"
+	while true; do
+		if [ -n "$_ls_channel" ]; then
+			columns="c: .channel_name, $columns"
+			unset _ls_channel
+			continue
+		fi
+		if [ -n "$_ls_sd_hash" ]; then
+			columns="$columns, h: .sd_hash"
+			unset _ls_sd_hash
+			continue
+		fi
+		break
+	done
+	while [ $page -le $total_pages ]; do
+		list_info="$(curl --silent -d"{\"method\": \"file_list\", \"params\": {\"page\": $page, \"page_size\": 1000000}}" "$api_server")"
+		total_pages="$(result_value "$list_info" "total_pages")"
+		page=$((page+1))
+		echo "$list_info" | jq ".result.items|.[]|{$columns}" | cut -d, -f1 | while read -r line; do
+			case "$line" in
+				\{ )
+					continue
+					;;
+				\} )
+					echo
+					continue
+					;;
+			esac
+			case "$line" in
+				"\"c\": null" )
+					;;
+				\"c\"* )
+					printf '%s' "$line"
+					;;
+				\"n\"* )
+					printf '%s' "$line"
+					;;
+				"\"p\": null")
+					if [ -n "$ls_files" ]; then
+						printf '""DELETE THIS""'
+					fi
+					;;
+				\"p\"* )
+					if [ -n "$ls_not_files" ]; then
+						printf '""DELETE THIS""'
+					elif [ -n "$ls_relative_path" ]; then
+						filename="$(echo "$line" | cut -d' ' -f2)"
+						filename="$(trim_quotes "$filename")"
+						printf '%s' "$(realpath --relative-base="$PWD" "$filename")"
+					elif [ -n "$ls_path" ]; then
+						trim_quotes "$line"
+					fi
+					;;
+				\"c\"* )
+					printf '%s' "$line"
+					;;
+				\"h\"* )
+					printf '%s' "$line"
+					;;
+			esac
+			printf ','
+		done | sed '/""DELETE THIS""/d; s/"[hcnp]": //g; s/"//g; ' | column -s',' -t
+	done
+}
+
+lbt_ls() {
+	options=hnPcfHF
+	longopts=help,no-path,absolute-path,channel,files,sd-hash,not-files
+	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
+	eval set -- "$parsed"
+#	echo "$@"
+
+	while true; do
+		case "$1" in
+			-H|--sd-hash)
+				ls_sd_hash=y
+				shift
+				;;
+			-f|--files)
+				ls_files=y
+				shift
+				;;
+			-F|--not-files )
+				ls_not_files=y
+				shift
+				;;
+			-h|--help)
+				help=y
+				shift
+				;;
+			-n|--no-path)
+				ls_no_path=y
+				shift
+				;;
+			-P|--absolute-path)
+				ls_path=y
+				shift
+				;;
+			-c|--channel)
+				ls_channel=y
+				shift
+				;;
+			--)
+				shift
+				break
+				;;
+			*)
+				echo "Programming error"
+				echo "$1"
+				exit 1
+				;;
+		esac
+	done
+
+	if [ -n "$ls_no_path" ]; then
+		unset ls_relative_path
+		if [ -n "$ls_path" ]; then
+			print_error "Error: --no-path and --path are incompatible options"
+		fi
+	else
+		ls_relative_path=y
+	fi
+
+	if [ -n "$ls_files" ] && [ -n "$ls_not_files" ]; then
+		print_error "Error: --files and --not-files are incompatible options"
+		exit 1
+	fi
+
+
+	if [ -n "$help" ]; then
+		lbt_help_ls
+		exit 0
+	fi
+
+
+	lbrynet_start_if_needed
+	get_local_lbrynet_config
+
+
+	lbrynet_list_files
+}
+
+lbt_help_generic() {
+	echo "Usage: lbt COMMAND..."
+	lbt_print_usage			
+	echo "Try lbt -h [COMMAND] for more info"
+}
+
+while true; do
+	case "$1" in
+		"open")
+			lbt_command="open"
+			shift
+			break
+			;;
+		"get")
+			lbt_command="get"
+			shift
+			break
+			;;
+		"ls")
+			lbt_command="ls"
+			shift
+			break
+			;;
+		"-h"|"--help")
+			lbt_help=y
+			shift
+			;;
+		"")
+			lbt_help_generic
+			if [ -n "$lbt_help" ]; then
+				exit 0
+			else
+				exit 1
+			fi
+			;;
+		*)
+			echo "Unknown command: $1"
+			lbt_print_usage
+			exit 1
+			;;
+	esac
+done
+
 case "$lbt_command" in
 	open )
+		if [ -n "$lbt_help" ]; then
+			lbt_help_open
+			exit 9
+		fi
 		open "$@"
 		;;
 	get )
+		if [ -n "$lbt_help" ]; then
+			lbt_help_get
+			exit 9
+		fi
 		get "$@"
+		;;
+	ls )
+		if [ -n "$lbt_help" ]; then
+			lbt_help_ls
+			exit 9
+		fi
+		lbt_ls "$@"
 		;;
 	* )
 		echo "Programming error: unknown command??"
