@@ -11,25 +11,25 @@ mkdir -p "$config_dir"
 
 if [ ! -f "$config_dir/mimetypes" ]; then
 	echo \
-"# This file determines rules for opening different types of files using 'lbt open'.
+'# This file determines rules for opening different types of files using 'lbt open'.
 # Rules are ordered by priority, the ones at the top have the highest priority.
 
 # First column is a glob pattern for matching MIME types.
-# Second column is the action: \"save\" means that the file must be downloaded before opening, \"stream\" means that the program can open the file as an HTTP stream.
-# Third column is the program to launch. \$1 is the stream URL/path to file, \$mimetype is the MIME type. Can be left empty if the second column says \"safe\"
+# Second column is the action: "save" means that the file must be downloaded before opening, "stream" means that the program can open the file as an HTTP stream.
+# Third column is the program to launch. $1 is the stream URL/path to file, $mimetype is the MIME type. Can be left empty if the second column says "safe"
 
 #Uncomment this if you want to open files using XDG default applications:
-#video/*	stream	gtk-launch \$(xdg-mime query default \$mimetype) \"\$1\"
-#audio/*	stream	gtk-launch \$(xdg-mime query default \$mimetype) \"\$1\"
-#text/html	stream	gtk-launch \$(xdg-mime query default \$mimetype) \"\$1\"
-#*		save	gtk-launch \$(xdg-mime query default \$mimetype) \"\$1\"
+#video/*	stream	gtk-launch $(xdg-mime query default $mimetype) "$1"
+#audio/*	stream	gtk-launch $(xdg-mime query default $mimetype) "$1"
+#text/html	stream	gtk-launch $(xdg-mime query default $mimetype) "$1"
+#*		save	gtk-launch $(xdg-mime query default $mimetype) "$1"
 
-video/*		stream	mpv \"\$1\"
-audio/*		stream	mpv \"\$1\"
-image/*		save	imv \"\$1\"
-text/html	stream	\$BROWSER \"\$1\"
-application/pdf	save	zathura \"\$1\"
-*		save" \
+video/*		stream	mpv "$1"
+audio/*		stream	mpv "$1"
+image/*		save	imv "$1"
+text/html	stream	$BROWSER "$1"
+application/pdf	save	zathura "$1"
+*		save' 
 	> "$config_dir/mimetypes"
 fi
 
@@ -127,7 +127,7 @@ is_running() {
 	case "$1" in
 		\{* )
 			#If starts with {, assume valid JSON
-			if echo "$1" | grep -q '"is_running": true'; then
+			if echo "$1" | grep -F '"is_running": true'-q ; then
 				return 0
 			fi
 			;;
@@ -190,6 +190,21 @@ print_error() {
 printf_info() {
 	if [ -z "$quiet" ]; then
 		>&2 printf "$@"
+	fi
+}
+
+
+. gettext.sh
+
+TEXTDOMAIN=lbt
+export TEXTDOMAIN
+
+check_incompatible() {
+	if [ -n "$1" ] && [ -n "$2" ]; then
+		opt1="$3"
+		opt2="$4"
+		>&2 eval_gettext 'Error: $opt1 and $opt2 are incompatible options.'; echo
+		exit 1
 	fi
 }
 
@@ -523,21 +538,11 @@ get() {
 	fi
 
 
-	if [ -n "$output_file" ]; then
-		if [ -n "$resolve" ]; then
-			print_error "Error: --output and --resolve are incompatible options"
-			exit 1
-		fi
-	fi
+	check_incompatible "$output_file" "$resolve" "--output" "--resolve"
 
-
-
+	check_incompatible "$save" "$force_stream" "--file" "--stream"
 	if [ -n "$save" ]; then
 		action="save"
-		if [ -n "$force_stream" ]; then
-			print_error "Error: --file and --stream options cannot be used at the same time."
-			exit 1
-		fi
 		if [ -z "$resolve" ]; then
 			print_error "Error: --file option must be used with --resolve"
 			exit 1
@@ -743,9 +748,6 @@ lbrynet_list_files() {
 						printf '%s' "$line"
 					fi
 					;;
-				\"c\"* )
-					printf '%s' "$line"
-					;;
 				\"h\"* )
 					printf '%s' "$line"
 					;;
@@ -850,29 +852,18 @@ lbt_ls() {
 		esac
 	done
 
-	if [ -n "$ls_no_path" ]; then
-		if [ -n "$ls_relative_path" ]; then
-			print_error "Error: --no-path and --relative-path are incompatible options"
-			exit 1
-		elif [ -n "$ls_path" ]; then
-			print_error "Error: --no-path and --absolute-path are incompatible options"
-			exit 1
-		fi
-	elif [ -z "$ls_path" ] && [ -z "$ls_relative_path" ]; then
+	check_incompatible "$ls_no_path" "$ls_path" "--no-path" "--absolute-path"
+	check_incompatible "$ls_relative_path" "$ls_path" "--relative-path" "--absolute-path"
+	check_incompatible "$ls_relative_path" "$ls_no_path" "--relative-path" "--no-path"
+	if [ -z "$ls_no_path" ] && [ -z "$ls_path" ] && [ -z "$ls_relative_path" ]; then
 		if [ -t 1 ]; then
 			ls_relative_path=y
 		else
 			ls_path=y
 		fi
-	elif [ -n "$ls_path" ] && [ -n "$ls_relative_path" ]; then
-		print_error "Error: --absolute-path and --relative-path are incompatible options"
-		exit 1
 	fi
 
-	if [ -n "$ls_full" ] && [ -n "$ls_empty" ]; then
-		print_error "Error: --full and --empty are incompatible options"
-		exit 1
-	fi
+	check_incompatible "$ls_full" "$ls_empty" "--full" "--empty"
 
 	if [ -z "$ls_color" ]; then
 		if [ -t 1 ]; then
@@ -882,20 +873,15 @@ lbt_ls() {
 		fi
 	fi
 
+	check_incompatible "$ls_no_name" "$ls_no_path" "--no-name" "--no-path"
 	if [ -n "$ls_no_name" ]; then
 		if [ -z "$ls_files" ]; then
 			print_error "Error: --no-name option requires --files"
 			exit 1
-		elif [ -n "$ls_no_path" ]; then
-			print_error "Error: --no-name and --no-path are incompatible options"
-			exit 1
 		fi
 	fi
 
-	if [ -n "$ls_files" ] && [ -n "$ls_not_files" ]; then
-		print_error "Error: --files and --not-files are incompatible options"
-		exit 1
-	fi
+	check_incompatible "$ls_files" "$ls_not_files" "--files" "--not-files"
 
 
 	if [ -n "$help" ]; then
