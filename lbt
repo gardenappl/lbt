@@ -56,9 +56,10 @@ lbt_help_ls() {
 	-f, --files 		Only list content that's saved as a local file
 	-F, --not-files 	Only list content that's not saved as a local file
 	-h, --help 		Print help
-	-P, --absolute-path 	List absolute paths instead of relative
 	-n, --no-path 		Don't list file paths
-	-N, --no-name 		Don't list claim names"
+	-N, --no-name 		Don't list claim names
+	-P, --absolute-path 	List absolute paths instead of relative
+	-r, --relative-path 	List relative paths, even when piping output"
 }
 
 lbt_help_get() {
@@ -630,7 +631,7 @@ lbrynet_list_files() {
 	if [ -n "$ls_sd_hash" ]; then
 		columns="$columns, h: .sd_hash"
 	fi
-	if [ -n "$ls_blobs" ] || [ -n "$ls_full" ] || [ -n "$ls_empty" ]; then
+	if [ -n "$ls_color" ] || [ -n "$ls_full" ] || [ -n "$ls_empty" ]; then
 		columns="b: .blobs_completed, t: .blobs_in_stream, $columns"
 	fi
 
@@ -668,20 +669,35 @@ lbrynet_list_files() {
 					continue
 					;;
 				\"t\"* )
-					if [ -n "$ls_blobs" ] && [ -z "$ls_no_name" ] || [ -n "$ls_full" ]; then
+					if [ -n "$ls_files" ]; then
+						is_full=y
+					elif [ "$ls_color" = y ] || [ -n "$ls_full" ]; then
 						blobs_completed="$(echo "$blobs_completed" | cut -d' ' -f2)"
 						blobs_total="$(echo "$line" | cut -d' ' -f2)"
 						if [ "$blobs_completed" -eq "$blobs_total" ]; then
 							is_full=y
 						else
-							is_full=n
+							unset is_full
 							if [ -n "$ls_full" ]; then
 								printf '""DELETE THIS""'
 							fi
 						fi
 					fi
 					if [ -n "$ls_blobs" ]; then
+						if [ "$ls_color" = y ]; then
+							if [ -n "$is_full" ]; then
+								printf '\033[38;5;2m'
+							elif [ -n "$is_empty" ]; then
+								printf '\033[38;5;1m'
+							else
+								printf '\033[38;5;3m'
+							fi
+						fi
+
 						printf '%s/%s' "$blobs_completed" "$line"
+						if [ "$ls_color" = y ]; then
+							printf '\033[m'
+						fi
 						unset blobs_completed
 					else
 						unset blobs_completed
@@ -691,10 +707,25 @@ lbrynet_list_files() {
 				"\"c\": null" )
 					;;
 				\"c\"* )
-					printf '%s' "$line"
+					if [ "$ls_color" = y ]; then
+						printf '\033[38;5;6m%s\033[m' "$line"
+					else
+						printf '%s' "$line"
+					fi
 					;;
 				\"n\"* )
-					printf '%s' "$line"
+					if [ "$ls_color" = y ]; then
+						if [ -n "$is_full" ]; then
+							printf '\033[38;5;2m'
+						elif [ -n "$is_empty" ]; then
+							printf '\033[38;5;1m'
+						else
+							printf '\033[38;5;3m'
+						fi
+						printf '\033[1m%s\033[m' "$line"
+					else
+						printf '%s' "$line"
+					fi
 					;;
 				"\"p\": null")
 					if [ -n "$ls_files" ]; then
@@ -728,14 +759,33 @@ lbrynet_list_files() {
 }
 
 lbt_ls() {
-	options=hnNPcfFNbmde
-	longopts=help,no-path,absolute-path,channel,files,not-files,no-name,blobs,mime-type,full,empty
+	options=hnNPcfFNbmder
+	longopts=help,no-path,absolute-path,channel,files,not-files,no-name,blobs,mime-type,full,empty,color::,relative-path
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
 #	echo "$@"
 
 	while true; do
 		case "$1" in
+			--color )
+				case "$2" in
+					"" )
+						ls_color=y
+						shift
+						;;
+					always )
+						ls_color=y
+						shift 2
+						;;
+					auto )
+						shift 2
+						;;
+					never )
+						ls_color=n
+						shift 2
+						;;
+				esac
+				;;
 			-d|--full )
 				ls_full=y
 				shift
@@ -750,6 +800,10 @@ lbt_ls() {
 				;;
 			-N|--no-name )
 				ls_no_name=y
+				shift
+				;;
+			-r|--relative-path)
+				ls_relative_path=y
 				shift
 				;;
 			-b|--blobs )
@@ -797,17 +851,35 @@ lbt_ls() {
 	done
 
 	if [ -n "$ls_no_path" ]; then
-		unset ls_relative_path
-		if [ -n "$ls_path" ]; then
-			print_error "Error: --no-path and --path are incompatible options"
+		if [ -n "$ls_relative_path" ]; then
+			print_error "Error: --no-path and --relative-path are incompatible options"
+			exit 1
+		elif [ -n "$ls_path" ]; then
+			print_error "Error: --no-path and --absolute-path are incompatible options"
+			exit 1
 		fi
-	else
-		ls_relative_path=y
+	elif [ -z "$ls_path" ] && [ -z "$ls_relative_path" ]; then
+		if [ -t 1 ]; then
+			ls_relative_path=y
+		else
+			ls_path=y
+		fi
+	elif [ -n "$ls_path" ] && [ -n "$ls_relative_path" ]; then
+		print_error "Error: --absolute-path and --relative-path are incompatible options"
+		exit 1
 	fi
 
 	if [ -n "$ls_full" ] && [ -n "$ls_empty" ]; then
 		print_error "Error: --full and --empty are incompatible options"
 		exit 1
+	fi
+
+	if [ -z "$ls_color" ]; then
+		if [ -t 1 ]; then
+			ls_color=y
+		else
+			ls_color=n
+		fi
 	fi
 
 	if [ -n "$ls_no_name" ]; then
