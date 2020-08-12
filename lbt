@@ -49,13 +49,16 @@ lbt_help_ls() {
 	echo \
 "Usage: lbt ls [options...]
 
+	-b, --blobs 		List downloaded and total blobs
 	-c, --channel 		List channel name
+	-d, --full 		Only list content that's fully downloaded
+	-e, --empty 		Only list content which has no downloaded blobs
 	-f, --files 		Only list content that's saved as a local file
 	-F, --not-files 	Only list content that's not saved as a local file
 	-h, --help 		Print help
-	-H, --sd-hash 		List stream hash
 	-P, --absolute-path 	List absolute paths instead of relative
-	-n, --no-path 		Don't list file paths"
+	-n, --no-path 		Don't list file paths
+	-N, --no-name 		Don't list claim names"
 }
 
 lbt_help_get() {
@@ -610,38 +613,81 @@ get() {
 lbrynet_list_files() {
 	page=1
 	total_pages=1
-	#_ls_path="${ls_path:-$ls_relative_path}"
-	_ls_channel="$ls_channel"
-	_ls_sd_hash="$ls_sd_hash"
-	columns="n: .claim_name, p: .download_path"
-	while true; do
-		if [ -n "$_ls_channel" ]; then
-			columns="c: .channel_name, $columns"
-			unset _ls_channel
-			continue
-		fi
-		if [ -n "$_ls_sd_hash" ]; then
-			columns="$columns, h: .sd_hash"
-			unset _ls_sd_hash
-			continue
-		fi
-		break
-	done
+	
+
+	# Download path must always be requested, so that we can later filter out
+	# --files or --not-files claims
+	columns="p: .download_path"
+	if [ -z "$ls_no_name" ]; then
+		columns="n: .claim_name, $columns"
+	fi
+	if [ -n "$ls_channel" ]; then
+		columns="c: .channel_name, $columns"
+	fi
+	if [ -n "$ls_mime_type" ]; then
+		columns="$columns, m: .mime_type"
+	fi
+	if [ -n "$ls_sd_hash" ]; then
+		columns="$columns, h: .sd_hash"
+	fi
+	if [ -n "$ls_blobs" ] || [ -n "$ls_full" ] || [ -n "$ls_empty" ]; then
+		columns="b: .blobs_completed, t: .blobs_in_stream, $columns"
+	fi
+
 	while [ $page -le $total_pages ]; do
 		list_info="$(curl --silent -d"{\"method\": \"file_list\", \"params\": {\"page\": $page, \"page_size\": 1000000}}" "$api_server")"
-		total_pages="$(result_value "$list_info" "total_pages")"
-		page=$((page+1))
-		echo "$list_info" | jq ".result.items|.[]|{$columns}" | cut -d, -f1 | while read -r line; do
+
+		echo "$list_info" | jq ".result.items|.[]|{$columns}" | sed 's/,$//' | while read -r line; do
 			case "$line" in
 				\{ )
 					continue
 					;;
 				\} )
-					echo
+					printf '\n'
 					continue
 					;;
 			esac
 			case "$line" in
+				\"m\"* )
+					printf '%s' "$line"
+					;;
+				\"b\"* )
+					case "$line" in
+						*": 0" )
+							is_empty=y
+							;;
+						* )
+							if [ -n "$ls_empty" ]; then
+								printf '""DELETE THIS""'
+							fi
+							unset is_empty
+							;;
+					esac
+
+					blobs_completed="$line"
+					continue
+					;;
+				\"t\"* )
+					if [ -n "$ls_blobs" ] && [ -z "$ls_no_name" ] || [ -n "$ls_full" ]; then
+						blobs_completed="$(echo "$blobs_completed" | cut -d' ' -f2)"
+						blobs_total="$(echo "$line" | cut -d' ' -f2)"
+						if [ "$blobs_completed" -eq "$blobs_total" ]; then
+							is_full=y
+						else
+							is_full=n
+							if [ -n "$ls_full" ]; then
+								printf '""DELETE THIS""'
+							fi
+						fi
+					fi
+					if [ -n "$ls_blobs" ]; then
+						printf '%s/%s' "$blobs_completed" "$line"
+						unset blobs_completed
+					else
+						unset blobs_completed
+						continue
+					fi
+					;;
 				"\"c\": null" )
 					;;
 				\"c\"* )
@@ -663,7 +709,7 @@ lbrynet_list_files() {
 						filename="$(trim_quotes "$filename")"
 						printf '%s' "$(realpath --relative-base="$PWD" "$filename")"
 					elif [ -n "$ls_path" ]; then
-						trim_quotes "$line"
+						printf '%s' "$line"
 					fi
 					;;
 				\"c\"* )
@@ -673,25 +719,48 @@ lbrynet_list_files() {
 					printf '%s' "$line"
 					;;
 			esac
-			printf ','
-		done | sed '/""DELETE THIS""/d; s/"[hcnp]": //g; s/"//g; ' | column -s',' -t
+			printf ',\t'
+		done | sed '/""DELETE THIS""/d; s/"\w": //g; s/"//g; s/,\t/"/g; s/"$//' | column -t -s'"'
+
+		total_pages="$(result_value "$list_info" "total_pages")"
+		page=$((page+1))
 	done
 }
 
 lbt_ls() {
-	options=hnPcfHF
-	longopts=help,no-path,absolute-path,channel,files,sd-hash,not-files
+	options=hnNPcfFNbmde
+	longopts=help,no-path,absolute-path,channel,files,not-files,no-name,blobs,mime-type,full,empty
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
 #	echo "$@"
 
 	while true; do
 		case "$1" in
-			-H|--sd-hash)
-				ls_sd_hash=y
+			-d|--full )
+				ls_full=y
 				shift
 				;;
-			-f|--files)
+			-e|--empty )
+				ls_empty=y
+				shift
+				;;
+			-m|--mime-type )
+				ls_mime_type=y
+				shift
+				;;
+			-N|--no-name )
+				ls_no_name=y
+				shift
+				;;
+			-b|--blobs )
+				ls_blobs=y
+				shift
+				;;
+			#-H|--sd-hash )
+			#	ls_sd_hash=y
+			#	shift
+			#	;;
+			-f|--files )
 				ls_files=y
 				shift
 				;;
@@ -699,27 +768,27 @@ lbt_ls() {
 				ls_not_files=y
 				shift
 				;;
-			-h|--help)
+			-h|--help )
 				help=y
 				shift
 				;;
-			-n|--no-path)
+			-n|--no-path )
 				ls_no_path=y
 				shift
 				;;
-			-P|--absolute-path)
+			-P|--absolute-path )
 				ls_path=y
 				shift
 				;;
-			-c|--channel)
+			-c|--channel )
 				ls_channel=y
 				shift
 				;;
-			--)
+			-- )
 				shift
 				break
 				;;
-			*)
+			* )
 				echo "Programming error"
 				echo "$1"
 				exit 1
@@ -734,6 +803,21 @@ lbt_ls() {
 		fi
 	else
 		ls_relative_path=y
+	fi
+
+	if [ -n "$ls_full" ] && [ -n "$ls_empty" ]; then
+		print_error "Error: --full and --empty are incompatible options"
+		exit 1
+	fi
+
+	if [ -n "$ls_no_name" ]; then
+		if [ -z "$ls_files" ]; then
+			print_error "Error: --no-name option requires --files"
+			exit 1
+		elif [ -n "$ls_no_path" ]; then
+			print_error "Error: --no-name and --no-path are incompatible options"
+			exit 1
+		fi
 	fi
 
 	if [ -n "$ls_files" ] && [ -n "$ls_not_files" ]; then
