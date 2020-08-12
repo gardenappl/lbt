@@ -11,7 +11,7 @@ mkdir -p "$config_dir"
 
 if [ ! -f "$config_dir/mimetypes" ]; then
 	echo \
-'# This file determines rules for opening different types of files using 'lbt open'.
+'# This file determines rules for opening different types of files using "lbt open".
 # Rules are ordered by priority, the ones at the top have the highest priority.
 
 # First column is a glob pattern for matching MIME types.
@@ -641,6 +641,11 @@ lbrynet_list_files() {
 	while [ $page -le $total_pages ]; do
 		list_info="$(curl --silent -d"{\"method\": \"file_list\", \"params\": {\"page\": $page, \"page_size\": 1000000}}" "$api_server")"
 
+		if [ "$ls_table" = y ]; then
+			output_command='column --table --separator=\"'
+		else
+			output_command='sed s/\"/\\t/g'
+		fi
 		echo "$list_info" | jq ".result.items|.[]|{$columns}" | sed 's/,$//' | while read -r line; do
 			case "$line" in
 				\{ )
@@ -653,7 +658,11 @@ lbrynet_list_files() {
 			esac
 			case "$line" in
 				\"m\"* )
-					printf '%s' "$line"
+					if [ "$ls_color" = y ]; then
+						printf '\033[38;5;4m%s\033[m' "$line"
+					else
+						printf '%s' "$line"
+					fi
 					;;
 				\"b\"* )
 					case "$line" in
@@ -753,7 +762,7 @@ lbrynet_list_files() {
 					;;
 			esac
 			printf ',\t'
-		done | sed '/""DELETE THIS""/d; s/"\w": //g; s/"//g; s/,\t/"/g; s/"$//' | column -t -s'"'
+		done | sed '/""DELETE THIS""/d; s/"\w": //g; s/"//g; s/,\t/"/g; s/"$//' | eval "$output_command"
 
 		total_pages="$(result_value "$list_info" "total_pages")"
 		page=$((page+1))
@@ -761,14 +770,38 @@ lbrynet_list_files() {
 }
 
 lbt_ls() {
-	options=hnNPcfFNbmder
-	longopts=help,no-path,absolute-path,channel,files,not-files,no-name,blobs,mime-type,full,empty,color::,relative-path
+	options=hnNPcfFNbmderT
+	longopts=help,no-path,absolute-path,channel,files,not-files,no-name,blobs,mime-type,full,empty,color::,relative-path,table::
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
 #	echo "$@"
 
 	while true; do
 		case "$1" in
+			-T|--table )
+				case "$2" in
+					"" )
+						ls_table=y
+						shift
+						;;
+					always )
+						ls_table=y
+						shift 2
+						;;
+					auto )
+						shift 2
+						;;
+					never )
+						ls_table=n
+						shift 2
+						;;
+					* )
+						print_error "Unknown parameter for --table: $2"
+						print_error "Available options: always, auto, never"
+						exit 1
+						;;
+				esac
+				;;
 			--color )
 				case "$2" in
 					"" )
@@ -785,6 +818,11 @@ lbt_ls() {
 					never )
 						ls_color=n
 						shift 2
+						;;
+					* )
+						print_error "Unknown parameter for --color: $2"
+						print_error "Available options: always, auto, never"
+						exit 1
 						;;
 				esac
 				;;
@@ -872,6 +910,13 @@ lbt_ls() {
 			ls_color=n
 		fi
 	fi
+	if [ -z "$ls_table" ]; then
+		if [ -t 1 ]; then
+			ls_table=y
+		else
+			ls_table=n
+		fi
+	fi
 
 	check_incompatible "$ls_no_name" "$ls_no_path" "--no-name" "--no-path"
 	if [ -n "$ls_no_name" ]; then
@@ -944,21 +989,21 @@ case "$lbt_command" in
 	open )
 		if [ -n "$lbt_help" ]; then
 			lbt_help_open
-			exit 9
+			exit 0
 		fi
 		open "$@"
 		;;
 	get )
 		if [ -n "$lbt_help" ]; then
 			lbt_help_get
-			exit 9
+			exit 0
 		fi
 		get "$@"
 		;;
 	ls )
 		if [ -n "$lbt_help" ]; then
 			lbt_help_ls
-			exit 9
+			exit 0
 		fi
 		lbt_ls "$@"
 		;;
