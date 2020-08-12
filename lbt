@@ -127,9 +127,11 @@ is_running() {
 	case "$1" in
 		\{* )
 			#If starts with {, assume valid JSON
-			if echo "$1" | grep -F '"is_running": true'-q ; then
-				return 0
-			fi
+			case "$1" in
+				*'"is_running": true'* )
+					return 0
+					;;
+			esac
 			;;
 	esac
 	return 1
@@ -161,14 +163,20 @@ lbrynet_get() {
 	curl --silent -d"{\"method\": \"get\", \"params\": {\"uri\": \"$1\"}}" "$api_server"
 }
 
-lbrynet_sd_save() {
-	curl --silent -d"{\"method\": \"file_save\", \"params\": {\"sd_hash\": \"$1\"}}" "$api_server"
+lbrynet_get_save() {
+	curl --silent -d"{\"method\": \"get\", \"params\": {\"uri\": \"$1\", \"save_file\": true}}" "$api_server"
 }
 
 
 is_download_complete() {
-	echo "$1" | grep -F '"completed": true' -q
-	return
+	case "$1" in
+		*'"completed": true'* )
+			return 0
+			;;
+		*)
+			return 1
+			;;
+	esac
 }
 
 #get_suggested_file_name() {
@@ -223,24 +231,18 @@ normalize_lbry_url() {
 	esac
 }
 
-request_download() {
-	sd_hash="$(result_value "$lbrynet_info" "sd_hash")"
-	lbrynet_sd_save "$sd_hash"
-}
-
 download() {
 	printf_info "Downloading..."
 	# suggested_file_name=$(result_value "$lbrynet_info" "suggested_file_name")
 	# echo "Suggested file name is $suggested_file_name"
 
-	sd_hash="$(result_value "$lbrynet_info" "sd_hash")"
 	# echo "$sd_hash"
 
 	while true; do
-		file_info="$(lbrynet_sd_save "$sd_hash")"
+		lbrynet_info="$(lbrynet_get_save "$1")"
 
-		blobs_total="$(result_value "$file_info" "blobs_in_stream")"
-		blobs_completed="$(result_value "$file_info" "blobs_completed")"
+		blobs_total="$(result_value "$lbrynet_info" "blobs_in_stream")"
+		blobs_completed="$(result_value "$lbrynet_info" "blobs_completed")"
 		printf_info '\rDownloading... %d/%d' "$blobs_completed" "$blobs_total"
 
 
@@ -250,7 +252,7 @@ download() {
 	done	
 	printf_info "\n"
 	
-	result_value "$file_info" "download_path"
+	result_value "$lbrynet_info" "download_path"
 }
 
 
@@ -292,11 +294,7 @@ do_mimetype_action() {
 	url=$(lbry_get_url "$action" "$3")
 
 
-	program=$(echo "$1" | cut -d' ' -f3- | awk "{\
-		gsub(/\\\$1/, \"$url\"); \
-		gsub(/\\\$mimetype/, \"$2\"); \
-		print \$0; \
-	}")
+	program=$(echo "$1" | cut -d' ' -f3- | sed "s|\$1|$url|g; s|\$mimetype|$2|")
 	if [ -z "$program" ]; then
 		if [ "$mimetype_action" = "save" ]; then
 			print_info "File saved to $url"
@@ -675,6 +673,8 @@ lbrynet_list_files() {
 					;;
 				\"t\"* )
 					if [ -n "$ls_files" ]; then
+						# With the --files option, only fully downloaded
+						# content will be shown anyway
 						is_full=y
 					elif [ "$ls_color" = y ] || [ -n "$ls_full" ]; then
 						blobs_completed="$(echo "$blobs_completed" | cut -d' ' -f2)"

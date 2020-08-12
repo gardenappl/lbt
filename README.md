@@ -83,6 +83,9 @@ Just download the `lbt` file and put it into your PATH.
 * LBRY (**you must make sure that `lbrynet` [is in your PATH](https://lbry.com/faq/how-to-cli)**)
 * curl
 * [jq](https://stedolan.github.io/jq/)
+* GNU gettext (for localizations)
+* sed
+* GNU coreutils (cut, ...), util-linux (column, getopt, ...)
 
 
 If you want to use `lbt open` as the default handler for lbry:// links:
