@@ -58,13 +58,15 @@ lbt_help_ls() {
 	-F, --not-files			Only list content that's not saved as a local file
 	-h, --human-readable WHEN 	Output size in human readable units (always,auto,never)
 	    --help			Print help
+	-l, --pretty WHEN 		Synonym for --color --human-readable --table
 	-m, --mime			List MIME type
 	-n, --no-path			Don't list file paths
 	-N, --no-name			Don't list claim names
 	-P, --absolute-path		List absolute paths instead of relative
-	-r, --relative-path		List relative paths, even when piping output
+	-R, --relative-path		List relative paths, even when piping output
+	-r, --reverse 			Reverse order when sorting
 	-s, --size			List total of the file
-	    --sort KEY 			Sort values by key (name,channel,size)
+	    --sort KEY 			Sort values by key (name,channel,size,mime)
 	-T, --table WHEN 		Output result as a table (always,auto,never)"
 }
 
@@ -632,26 +634,31 @@ lbrynet_list_files() {
 	# Download path must always be requested, so that we can later filter out
 	# --files or --not-files claims
 	columns="p: .download_path"
+	total_columns=1
 	if [ -z "$ls_no_name" ]; then
 		columns="n: .claim_name, $columns"
+		total_columns=$((total_columns + 1))
 	fi
 	if [ -n "$ls_size" ]; then
 		columns="s: .total_bytes, $columns"
 		size_column=1
+		total_columns=$((total_columns + 1))
 	fi
 	if [ -n "$ls_channel" ]; then
 		columns="c: .channel_name, $columns"
 		size_column=$((size_column + 1))
+		total_columns=$((total_columns + 1))
 	fi
 	if [ -n "$ls_mime_type" ]; then
 		columns="$columns, m: .mime_type"
-	fi
-	if [ -n "$ls_sd_hash" ]; then
-		columns="$columns, h: .sd_hash"
+		mime_column=$((total_columns + 1))
+		total_columns=$((total_columns + 1))
 	fi
 	if [ -n "$ls_blobs" ]; then
 		columns="b: .blobs_completed, t: .blobs_in_stream, $columns"
 		size_column=$((size_column + 1))
+		mime_column=$((mime_column + 1))
+		total_columns=$((total_columns + 1))
 	fi
 	# In all of these cases, we need attributes like $is_full or $is_empty
 	if [ -n "$ls_color" ] || [ -n "$ls_size" ] || [ -n "$ls_full" ] \
@@ -667,16 +674,21 @@ lbrynet_list_files() {
 			channel )
 				list_params=', "sort": "channel_name"'
 				;;
-			# sorting by size has special handling, below
+			# sorting by size, MIME type, etc. is handled separately
 		esac
+
 		list_info="$(curl --silent -d"{\"method\": \"file_list\", \"params\": {\"page\": $page, \"page_size\": 1000000$list_params}}" "$api_server")"
 		lbrynet_check_error "$list_info"
 
 		#no-op pipe, we will build a command on top of it
 		output_command="tee"
+
 		if [ -n "$ls_size" ]; then
 			if [ "$ls_sort" = "size" ]; then
-				output_command="$output_command | sort --field-separator='\"' --numeric-sort \
+				if [ -n "$ls_reverse" ]; then
+					sort_params="--reverse"
+				fi
+				output_command="$output_command | sort $sort_params --field-separator='\"' --numeric-sort \
 					--key=$size_column --key=$((size_column + 1))"
 			fi
 
@@ -692,10 +704,24 @@ lbrynet_list_files() {
 			fi
 		fi
 
+		if [ -n "$ls_mime_type" ] && [ "$ls_sort" = "mime" ]; then
+			if [ -n "$ls_reverse" ]; then
+				sort_params="--reverse"
+			fi
+			output_command="$output_command | sort $sort_params --field-separator='\"' --key=$mime_column"
+		fi
+
+		if [ -n "$ls_reverse" ]; then
+			# "size" and "mime" sort reversal is handled separately
+			if [ "$ls_sort" != "size" ] && [ "$ls_sort" != "mime" ]; then
+				output_command="$output_command | tac"
+			fi
+		fi
+
 		if [ "$ls_table" = y ]; then
 			output_command="$output_command | column --table --separator=\\\""
 		else
-			output_command="$output_command | sed s/\\\"/\\t/g"
+			output_command="$output_command | sed s/\\\"/\\\t/g"
 		fi
 
 		echo "$list_info" | jq ".result.items|.[]|{$columns}" | sed 's/,$//' | while read -r line; do
@@ -755,7 +781,7 @@ lbrynet_list_files() {
 						if [ "$ls_color" = y ]; then
 							printf '\033[38;5;3m'
 						fi
-						printf '%%'
+						printf '<'
 					fi
 					# Print color at the end of the previous column,
 					# as opposed to this column, so that
@@ -842,14 +868,40 @@ lbrynet_list_files() {
 }
 
 lbt_ls() {
-	options=nNPcfFNbmdeErT::sh::
-	longopts=help,no-path,absolute-path,channel,files,not-files,no-name,blobs,mime-type,full,empty,not-empty,color::,relative-path,table::,size,human-readable::,sort:
+	options=nNPcfFNbmdeERT::sh::rl::
+	longopts=help,no-path,absolute-path,channel,files,not-files,no-name,blobs,mime-type,full,empty,not-empty,color::,relative-path,table::,size,human-readable::,sort:,reverse,pretty::
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
 #	echo "$@"
 
 	while true; do
 		case "$1" in
+			-l|--pretty )
+				case "$2" in
+					"" )
+						ls_pretty=y
+						;;
+					always )
+						ls_pretty=y
+						;;
+					auto )
+						ls_pretty=auto
+						;;
+					never )
+						ls_pretty=n
+						;;
+					* )
+						print_error "Unknown parameter for --pretty-print: $2"
+						print_error "Available options: always, auto, never"
+						exit 1
+						;;
+				esac
+				shift 2
+				;;
+			-r|--reverse )
+				ls_reverse=y
+				shift
+				;;
 			--sort )
 				case "$2" in
 					name )
@@ -861,9 +913,12 @@ lbt_ls() {
 					channel )
 						ls_sort=channel
 						;;
+					mime )
+						ls_sort=mime
+						;;
 					* )
 						print_error "Unknown parameter for --sort: $2"
-						print_error "Available options: name, channel, size"
+						print_error "Available options: name, channel, size, mime"
 						exit 1
 						;;
 				esac
@@ -877,18 +932,14 @@ lbt_ls() {
 				case "$2" in
 					"" )
 						ls_human=y
-						shift 2
 						;;
 					always )
 						ls_human=y
-						shift 2
 						;;
 					auto )
-						shift 2
 						;;
 					never )
 						ls_human=n
-						shift 2
 						;;
 					* )
 						print_error "Unknown parameter for --human-readable: $2"
@@ -896,6 +947,7 @@ lbt_ls() {
 						exit 1
 						;;
 				esac
+				shift 2
 				;;	
 			-s|--size )
 				ls_size=y
@@ -905,18 +957,14 @@ lbt_ls() {
 				case "$2" in
 					"" )
 						ls_table=y
-						shift 2
 						;;
 					always )
 						ls_table=y
-						shift 2
 						;;
 					auto )
-						shift 2
 						;;
 					never )
 						ls_table=n
-						shift 2
 						;;
 					* )
 						print_error "Unknown parameter for --table: $2"
@@ -924,23 +972,20 @@ lbt_ls() {
 						exit 1
 						;;
 				esac
+				shift 2
 				;;
 			--color )
 				case "$2" in
 					"" )
 						ls_color=y
-						shift 2
 						;;
 					always )
 						ls_color=y
-						shift 2
 						;;
 					auto )
-						shift 2
 						;;
 					never )
 						ls_color=n
-						shift 2
 						;;
 					* )
 						print_error "Unknown parameter for --color: $2"
@@ -948,6 +993,7 @@ lbt_ls() {
 						exit 1
 						;;
 				esac
+				shift 2
 				;;
 			-d|--full )
 				ls_full=y
@@ -965,7 +1011,7 @@ lbt_ls() {
 				ls_no_name=y
 				shift
 				;;
-			-r|--relative-path)
+			-R|--relative-path)
 				ls_relative_path=y
 				shift
 				;;
@@ -985,7 +1031,7 @@ lbt_ls() {
 				ls_not_files=y
 				shift
 				;;
-			-h|--help )
+			--help )
 				help=y
 				shift
 				;;
@@ -1027,13 +1073,21 @@ lbt_ls() {
 	check_incompatible "$ls_full" "$ls_empty" "--full" "--empty"
 	check_incompatible "$ls_not_empty" "$ls_empty" "--not-empty" "--empty"
 
-	#if [ "$ls_human" = y ]; then
-	#	ls_color=y
-	#	ls_table=y
-	#elif [ "$ls_human" = n ]; then
-	#	ls_color=n
-	#	ls_table=n
-	#fi
+	if [ -n "$ls_pretty" ]; then
+		if [ "$ls_pretty" = "auto" ]; then
+			if [ -t 1 ]; then
+				ls_pretty=y
+			else
+				ls_pretty=n
+			fi
+			unset ls_pretty
+		else
+			ls_human="${ls_human:-$ls_pretty}"
+			ls_color="${ls_color:-$ls_pretty}"
+			ls_table="${ls_table:-$ls_pretty}"
+		fi
+	fi
+
 
 	if [ -t 1 ]; then
 		ls_human="${ls_human:-y}"
@@ -1045,6 +1099,7 @@ lbt_ls() {
 		ls_table="${ls_table:-n}"
 	fi
 
+	check_incompatible "$ls_files" "$ls_not_files" "--files" "--not-files"
 	check_incompatible "$ls_no_name" "$ls_no_path" "--no-name" "--no-path"
 	if [ -n "$ls_no_name" ]; then
 		if [ -z "$ls_files" ]; then
@@ -1053,7 +1108,19 @@ lbt_ls() {
 		fi
 	fi
 
-	check_incompatible "$ls_files" "$ls_not_files" "--files" "--not-files"
+
+	if [ "$ls_sort" = "mime" ] && [ -z "$ls_mime_type" ]; then
+		print_error "Error: --sort=mime requires --mime"
+		exit 1
+	elif [ "$ls_sort" = "size" ] && [ -z "$ls_size" ]; then
+		print_error "Error: --sort=size requires --size"
+		exit 1
+	fi
+	
+	if [ -z "$ls_sort" ] && [ -n "$ls_reverse" ]; then
+		print_error "Error: --reverse requires --sort"
+		exit 1
+	fi
 
 
 	if [ -n "$help" ]; then
