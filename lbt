@@ -672,16 +672,17 @@ lbrynet_list_files() {
 		list_info="$(curl --silent -d"{\"method\": \"file_list\", \"params\": {\"page\": $page, \"page_size\": 1000000$list_params}}" "$api_server")"
 		lbrynet_check_error "$list_info"
 
+		#no-op pipe, we will build a command on top of it
+		output_command="tee"
 		if [ -n "$ls_size" ]; then
 			if [ "$ls_sort" = "size" ]; then
-				output_command="sort --field-separator='\"' --numeric-sort \
+				output_command="$output_command | sort --field-separator='\"' --numeric-sort \
 					--key=$size_column --key=$((size_column + 1))"
-			else
-				#no-op pipe
-				output_command="tee"
 			fi
+
 			output_command="$output_command | awk 'BEGIN { FS = \"\\\"\"; OFS=\"\\\"\" } \
 				{ sub(/./, \"\", \$$size_column); print }'"
+
 			if [ "$ls_human" = y ]; then
 				output_command="$output_command | sed 's/\"/!!TEMP!!\"/$size_column' \
 					| numfmt --to=iec-i --field=$((size_column + 1)) --delimiter=\\\" --invalid=ignore \
