@@ -49,17 +49,23 @@ lbt_help_ls() {
 	echo \
 "Usage: lbt ls [options...]
 
-	-b, --blobs 		List downloaded and total blobs
-	-c, --channel 		List channel name
-	-d, --full 		Only list content that's fully downloaded
-	-e, --empty 		Only list content which has no downloaded blobs
-	-f, --files 		Only list content that's saved as a local file
-	-F, --not-files 	Only list content that's not saved as a local file
-	-h, --help 		Print help
-	-n, --no-path 		Don't list file paths
-	-N, --no-name 		Don't list claim names
-	-P, --absolute-path 	List absolute paths instead of relative
-	-r, --relative-path 	List relative paths, even when piping output"
+	-b, --blobs			List downloaded and total blobs
+	-c, --channel			List channel name
+	    --color WHEN 		Output result with color (always,auto,never)
+	-d, --full			Only list content that's fully downloaded
+	-e, --empty			Only list content which has no downloaded blobs
+	-f, --files			Only list content that's saved as a local file
+	-F, --not-files			Only list content that's not saved as a local file
+	-h, --human-readable WHEN 	Output size in human readable units (always,auto,never)
+	    --help			Print help
+	-m, --mime			List MIME type
+	-n, --no-path			Don't list file paths
+	-N, --no-name			Don't list claim names
+	-P, --absolute-path		List absolute paths instead of relative
+	-r, --relative-path		List relative paths, even when piping output
+	-s, --size			List total of the file
+	    --sort KEY 			Sort values by key (name,channel,size)
+	-T, --table WHEN 		Output result as a table (always,auto,never)"
 }
 
 lbt_help_get() {
@@ -123,6 +129,27 @@ trim_quotes() {
 
 
 
+lbrynet_check_error() {
+	case "$1" in
+		\{* )
+			#If starts with {. assume valid JSON
+			case "$1" in
+				*'"error": {'* )
+					print_error "Error in LBRY daemon."
+					print_error "$1"
+					exit 1
+					;;
+			esac
+			;;
+		* )
+			print_error "Error in LBRY daemon."
+			print_error "$1"
+			exit 1
+			;;
+	esac
+}
+
+
 is_running() {
 	case "$1" in
 		\{* )
@@ -135,7 +162,6 @@ is_running() {
 			;;
 	esac
 	return 1
-
 }
 
 lbrynet_start_if_needed() {
@@ -154,6 +180,7 @@ lbrynet_start_if_needed() {
 
 get_local_lbrynet_config() {
 	lbrynet_config=$(lbrynet settings get)
+	lbrynet_check_error "$lbrynet_config"
 #	streaming_server=$(json_value "$lbrynet_config" "streaming_server")
 	api_server=$(json_value "$lbrynet_config" "api")
 #	download_dir=$(json_value "$lbrynet_config" "download_dir")
@@ -240,6 +267,7 @@ download() {
 
 	while true; do
 		lbrynet_info="$(lbrynet_get_save "$1")"
+		lbrynet_check_error "$lbrynet_info"
 
 		blobs_total="$(result_value "$lbrynet_info" "blobs_in_stream")"
 		blobs_completed="$(result_value "$lbrynet_info" "blobs_completed")"
@@ -332,25 +360,8 @@ prepare() {
 
 	get_local_lbrynet_config
 
-
 	lbrynet_info="$(lbrynet_get "$url")"
-	#echo "$lbrynet_info"
-	case $lbrynet_info in
-		\{* ) 
-			# Assume valid JSON if starts with {
-			;;
-		* ) 
-			print_error "Error: $lbrynet_info"
-			exit 1
-			;;
-	esac
-
-
-	error="$(result_value "$lbrynet_info" "error")"
-	if [ "$error" != "null" ]; then
-		print_error "Error: $error"
-		exit 1
-	fi
+	lbrynet_check_error "$lbrynet_info"
 }
 
 
@@ -617,7 +628,6 @@ get() {
 lbrynet_list_files() {
 	page=1
 	total_pages=1
-	
 
 	# Download path must always be requested, so that we can later filter out
 	# --files or --not-files claims
@@ -625,8 +635,13 @@ lbrynet_list_files() {
 	if [ -z "$ls_no_name" ]; then
 		columns="n: .claim_name, $columns"
 	fi
+	if [ -n "$ls_size" ]; then
+		columns="s: .total_bytes, $columns"
+		size_column=1
+	fi
 	if [ -n "$ls_channel" ]; then
 		columns="c: .channel_name, $columns"
+		size_column=$((size_column + 1))
 	fi
 	if [ -n "$ls_mime_type" ]; then
 		columns="$columns, m: .mime_type"
@@ -634,18 +649,54 @@ lbrynet_list_files() {
 	if [ -n "$ls_sd_hash" ]; then
 		columns="$columns, h: .sd_hash"
 	fi
-	if [ -n "$ls_color" ] || [ -n "$ls_full" ] || [ -n "$ls_empty" ]; then
+	if [ -n "$ls_blobs" ]; then
 		columns="b: .blobs_completed, t: .blobs_in_stream, $columns"
+		size_column=$((size_column + 1))
+	fi
+	# In all of these cases, we need attributes like $is_full or $is_empty
+	if [ -n "$ls_color" ] || [ -n "$ls_size" ] || [ -n "$ls_full" ] \
+			|| [ -n "$ls_empty" ] || [ -n "$ls_not_empty" ]; then
+		columns="e: .blobs_completed, r: .blobs_remaining, $columns"
 	fi
 
 	while [ $page -le $total_pages ]; do
-		list_info="$(curl --silent -d"{\"method\": \"file_list\", \"params\": {\"page\": $page, \"page_size\": 1000000}}" "$api_server")"
+		case "$ls_sort" in
+			name )
+				list_params=', "sort": "claim_name"'
+				;;
+			channel )
+				list_params=', "sort": "channel_name"'
+				;;
+			# sorting by size has special handling, below
+		esac
+		list_info="$(curl --silent -d"{\"method\": \"file_list\", \"params\": {\"page\": $page, \"page_size\": 1000000$list_params}}" "$api_server")"
+		lbrynet_check_error "$list_info"
+
+		if [ -n "$ls_size" ]; then
+			if [ "$ls_sort" = "size" ]; then
+				output_command="sort --field-separator='\"' --numeric-sort \
+					--key=$size_column --key=$((size_column + 1))"
+			else
+				#no-op pipe
+				output_command="tee"
+			fi
+			output_command="$output_command | awk 'BEGIN { FS = \"\\\"\"; OFS=\"\\\"\" } \
+				{ sub(/./, \"\", \$$size_column); print }'"
+			if [ "$ls_human" = y ]; then
+				output_command="$output_command | sed 's/\"/!!TEMP!!\"/$size_column' \
+					| numfmt --to=iec-i --field=$((size_column + 1)) --delimiter=\\\" --invalid=ignore \
+					| sed 's/!!TEMP!!\"//g'"
+			else
+				output_command="$output_command | sed 's|\"||$size_column'"
+			fi
+		fi
 
 		if [ "$ls_table" = y ]; then
-			output_command='column --table --separator=\"'
+			output_command="$output_command | column --table --separator=\\\""
 		else
-			output_command='sed s/\"/\\t/g'
+			output_command="$output_command | sed s/\\\"/\\t/g"
 		fi
+
 		echo "$list_info" | jq ".result.items|.[]|{$columns}" | sed 's/,$//' | while read -r line; do
 			case "$line" in
 				\{ )
@@ -657,72 +708,88 @@ lbrynet_list_files() {
 					;;
 			esac
 			case "$line" in
+				"\"e\": 0" )
+					if [ -n "$ls_not_empty" ]; then
+						printf '""DELETE THIS""'
+					fi
+					is_empty=y
+					continue
+					;;
+				\"e\"* )
+					unset is_empty
+					if [ -n "$ls_empty" ]; then
+						printf '""DELETE THIS""'
+					fi
+					continue
+					;;
+				"\"r\": 0" )
+					is_full=y
+					continue
+					;;
+				\"r\"* )
+					unset is_full
+					if [ -n "$ls_full" ]; then
+						printf '""DELETE THIS""'
+					fi
+					continue
+					;;
+				\"s\"* )
+					if [ -n "$is_full" ]; then
+						# The numbets will be removed later,
+						# this is just so that the sort algorithm
+						# places empty, in-progress, and full files
+						# in the correct order
+						printf '3'
+						if [ "$ls_color" = y ]; then
+							printf '\033[38;5;2m'
+						fi
+					elif [ -n "$is_empty" ]; then
+						printf '1'
+						if [ "$ls_color" = y ]; then
+							printf '\033[38;5;1m'
+						fi
+						printf '!'
+					else
+						printf '2'
+						if [ "$ls_color" = y ]; then
+							printf '\033[38;5;3m'
+						fi
+						printf '%%'
+					fi
+					# Print color at the end of the previous column,
+					# as opposed to this column, so that
+					# numfmt doesn't have to deal with the escape codes.
+					printf ',\t%s' "$line"
+					;;
 				\"m\"* )
 					if [ "$ls_color" = y ]; then
-						printf '\033[38;5;4m%s\033[m' "$line"
+						printf '\033[38;5;4m%s' "$line"
 					else
 						printf '%s' "$line"
 					fi
 					;;
 				\"b\"* )
-					case "$line" in
-						*": 0" )
-							is_empty=y
-							;;
-						* )
-							if [ -n "$ls_empty" ]; then
-								printf '""DELETE THIS""'
-							fi
-							unset is_empty
-							;;
-					esac
-
 					blobs_completed="$line"
 					continue
 					;;
 				\"t\"* )
-					if [ -n "$ls_files" ]; then
-						# With the --files option, only fully downloaded
-						# content will be shown anyway
-						is_full=y
-					elif [ "$ls_color" = y ] || [ -n "$ls_full" ]; then
-						blobs_completed="$(echo "$blobs_completed" | cut -d' ' -f2)"
-						blobs_total="$(echo "$line" | cut -d' ' -f2)"
-						if [ "$blobs_completed" -eq "$blobs_total" ]; then
-							is_full=y
+					if [ "$ls_color" = y ]; then
+						if [ -n "$is_full" ]; then
+							printf '\033[38;5;2m'
+						elif [ -n "$is_empty" ]; then
+							printf '\033[38;5;1m'
 						else
-							unset is_full
-							if [ -n "$ls_full" ]; then
-								printf '""DELETE THIS""'
-							fi
+							printf '\033[38;5;3m'
 						fi
 					fi
-					if [ -n "$ls_blobs" ]; then
-						if [ "$ls_color" = y ]; then
-							if [ -n "$is_full" ]; then
-								printf '\033[38;5;2m'
-							elif [ -n "$is_empty" ]; then
-								printf '\033[38;5;1m'
-							else
-								printf '\033[38;5;3m'
-							fi
-						fi
 
-						printf '%s/%s' "$blobs_completed" "$line"
-						if [ "$ls_color" = y ]; then
-							printf '\033[m'
-						fi
-						unset blobs_completed
-					else
-						unset blobs_completed
-						continue
-					fi
+					printf '%s/%s' "$blobs_completed" "$line"
 					;;
 				"\"c\": null" )
 					;;
 				\"c\"* )
 					if [ "$ls_color" = y ]; then
-						printf '\033[38;5;6m%s\033[m' "$line"
+						printf '\033[38;5;6m\033[1m%s\033[m' "$line"
 					else
 						printf '%s' "$line"
 					fi
@@ -747,6 +814,9 @@ lbrynet_list_files() {
 					fi
 					;;
 				\"p\"* )
+					if [ "$ls_color" = y ]; then
+						printf '\033[m'
+					fi
 					if [ -n "$ls_not_files" ]; then
 						printf '""DELETE THIS""'
 					elif [ -n "$ls_relative_path" ]; then
@@ -762,6 +832,7 @@ lbrynet_list_files() {
 					;;
 			esac
 			printf ',\t'
+		#Clean up our "temporary" JSON, separate fields with " characters
 		done | sed '/""DELETE THIS""/d; s/"\w": //g; s/"//g; s/,\t/"/g; s/"$//' | eval "$output_command"
 
 		total_pages="$(result_value "$list_info" "total_pages")"
@@ -770,19 +841,70 @@ lbrynet_list_files() {
 }
 
 lbt_ls() {
-	options=hnNPcfFNbmderT
-	longopts=help,no-path,absolute-path,channel,files,not-files,no-name,blobs,mime-type,full,empty,color::,relative-path,table::
+	options=nNPcfFNbmdeErT::sh::
+	longopts=help,no-path,absolute-path,channel,files,not-files,no-name,blobs,mime-type,full,empty,not-empty,color::,relative-path,table::,size,human-readable::,sort:
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
 #	echo "$@"
 
 	while true; do
 		case "$1" in
+			--sort )
+				case "$2" in
+					name )
+						ls_sort=name
+						;;
+					size )
+						ls_sort=size
+						;;
+					channel )
+						ls_sort=channel
+						;;
+					* )
+						print_error "Unknown parameter for --sort: $2"
+						print_error "Available options: name, channel, size"
+						exit 1
+						;;
+				esac
+				shift 2
+				;;
+			-E|--not-empty )
+				ls_not_empty=y
+				shift
+				;;
+			-h|--human-readable )
+				case "$2" in
+					"" )
+						ls_human=y
+						shift 2
+						;;
+					always )
+						ls_human=y
+						shift 2
+						;;
+					auto )
+						shift 2
+						;;
+					never )
+						ls_human=n
+						shift 2
+						;;
+					* )
+						print_error "Unknown parameter for --human-readable: $2"
+						print_error "Available options: always, auto, never"
+						exit 1
+						;;
+				esac
+				;;	
+			-s|--size )
+				ls_size=y
+				shift
+				;;
 			-T|--table )
 				case "$2" in
 					"" )
 						ls_table=y
-						shift
+						shift 2
 						;;
 					always )
 						ls_table=y
@@ -806,7 +928,7 @@ lbt_ls() {
 				case "$2" in
 					"" )
 						ls_color=y
-						shift
+						shift 2
 						;;
 					always )
 						ls_color=y
@@ -902,20 +1024,24 @@ lbt_ls() {
 	fi
 
 	check_incompatible "$ls_full" "$ls_empty" "--full" "--empty"
+	check_incompatible "$ls_not_empty" "$ls_empty" "--not-empty" "--empty"
 
-	if [ -z "$ls_color" ]; then
-		if [ -t 1 ]; then
-			ls_color=y
-		else
-			ls_color=n
-		fi
-	fi
-	if [ -z "$ls_table" ]; then
-		if [ -t 1 ]; then
-			ls_table=y
-		else
-			ls_table=n
-		fi
+	#if [ "$ls_human" = y ]; then
+	#	ls_color=y
+	#	ls_table=y
+	#elif [ "$ls_human" = n ]; then
+	#	ls_color=n
+	#	ls_table=n
+	#fi
+
+	if [ -t 1 ]; then
+		ls_human="${ls_human:-y}"
+		ls_color="${ls_color:-y}"
+		ls_table="${ls_table:-y}"
+	else
+		ls_human="${ls_human:-n}"
+		ls_color="${ls_color:-n}"
+		ls_table="${ls_table:-n}"
 	fi
 
 	check_incompatible "$ls_no_name" "$ls_no_path" "--no-name" "--no-path"
@@ -944,8 +1070,8 @@ lbt_ls() {
 
 lbt_help_generic() {
 	echo "Usage: lbt COMMAND..."
+	echo "   or  lbt --help COMMAND..."
 	lbt_print_usage			
-	echo "Try lbt -h [COMMAND] for more info"
 }
 
 while true; do
