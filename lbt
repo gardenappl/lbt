@@ -311,7 +311,7 @@ download() {
 		printf_info '\rSaving to file... %s/%s' "$written_bytes" "$total_bytes"
 		sleep 0.5
 	done
-	printf_info "\rSaving to file.. Done.\n"
+	printf_info '\033[2K\rSaving to file... Done.\n'
 	
 	result_value "$lbrynet_info" "download_path"
 }
