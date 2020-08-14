@@ -37,7 +37,7 @@ fi
 lbt_help_open() {
 	echo \
 "Usage: lbt open URL [options...]
-   or  lbt get #CLAIM_ID [options...]
+   or  lbt open #CLAIM_ID [options...]
 
 	-f, --save-file 	Save content as a file even if it can be streamed
 	-h, --help 		Print help
@@ -68,7 +68,7 @@ lbt_help_ls() {
 	-R, --relative-path		List relative paths, even when piping output
 	-r, --reverse 			Reverse order when sorting
 	-s, --no-size			Don't list total of the file
-	--sort KEY 			Sort values by key (name,channel,size,mime,time,claim-id)
+	    --sort KEY 			Sort values by key (name,channel,size,mime,time,claim-id)
 	-t, --no-time 			Don't list time of first access
 	-T, --table WHEN 		Output result as a table (always,auto,never)"
 }
@@ -140,7 +140,7 @@ lbrynet_check_error() {
 		\{* )
 			#If starts with {. assume valid JSON
 			case "$1" in
-				*'"error": {'* )
+				*'"error": '* )
 					print_error "Error in LBRY daemon."
 					print_error "$1"
 					exit 1
@@ -198,6 +198,18 @@ lbrynet_get() {
 
 lbrynet_get_save() {
 	curl --silent -d"{\"method\": \"get\", \"params\": {\"uri\": \"$1\", \"save_file\": true}}" "$api_server"
+}
+
+lbrynet_search_claim_id() {
+	claim_id="${1#\#}"
+	claim_info="$(curl --silent -d"{\"method\": \"claim_search\", \"params\": {\"claim_id\": \"$claim_id\"}}" "$api_server")"
+	lbrynet_check_error "$claim_info"
+
+	if [ "$(result_value "$claim_info" "total_items")" -ne 1 ]; then
+		print_error "Could not find claim with ID $claim_id"
+		exit 1
+	fi
+	echo "$claim_info" | jq '.result.items|.[]'
 }
 
 
@@ -280,11 +292,26 @@ download() {
 		printf_info '\rDownloading... %d/%d' "$blobs_completed" "$blobs_total"
 
 
-		[ "$blobs_completed" -lt "$blobs_total" ] \
-			|| break
-		sleep 1
+		if [ "$blobs_completed" -ge "$blobs_total" ]; then
+			break
+		fi
+		sleep 0.5
 	done	
-	printf_info "\n"
+	printf_info "\nSaving to file... "
+	while ! is_download_complete "$lbrynet_info"; do
+		# Wait for the file to get saved
+		lbrynet_info="$(lbrynet_get_save "$1")"
+		lbrynet_check_error "$lbrynet_info"
+		
+		written_bytes="$(result_value "$lbrynet_info" "written_bytes")"
+		written_bytes="$(numfmt --to=iec-i "$written_bytes")"
+		total_bytes="$(result_value "$lbrynet_info" "total_bytes")"
+		total_bytes="$(numfmt --to=iec-i "$total_bytes")"
+
+		printf_info '\rSaving to file... %s/%s' "$written_bytes" "$total_bytes"
+		sleep 0.5
+	done
+	printf_info "\rSaving to file.. Done.\n"
 	
 	result_value "$lbrynet_info" "download_path"
 }
@@ -310,10 +337,7 @@ do_mimetype_action() {
 
 	if [ -n "$save" ]; then
 		action="save"
-		if [ -n "$force_stream" ]; then
-			print_info "Can't use --save-file and --force-stream options at the same time"
-			exit 1
-		fi
+		check_incompatible "$save" "$force_stream" "--save-file" "--force_stream"
 	elif [ -n "$force_stream" ]; then
 		action="stream"
 	else
@@ -358,17 +382,6 @@ handle_lbry_url() {
 
 
 
-
-
-
-prepare() {
-	lbrynet_start_if_needed
-
-	get_local_lbrynet_config
-
-	lbrynet_info="$(lbrynet_get "$url")"
-	lbrynet_check_error "$lbrynet_info"
-}
 
 
 lbt_print_usage() {
@@ -436,13 +449,30 @@ open() {
 		exit 1
 	fi
 
-	url="$(normalize_lbry_url "$1")"
-	if [ "$url" != "$1" ]; then
-		print_info "Resolving $url..."
+	case "$1" in
+		\#* )
+			is_claim_id=y
+			;;
+		* )
+			url="$(normalize_lbry_url "$1")"
+			if [ "$url" != "$1" ]; then
+				print_info "Resolving $url..."
+			fi
+			;;
+	esac
+
+
+	lbrynet_start_if_needed
+
+	get_local_lbrynet_config
+
+	if [ -n "$is_claim_id" ]; then
+		claim_info="$(lbrynet_search_claim_id "$1")"
+		url="$(json_value "$claim_info" "canonical_url")"
 	fi
+	lbrynet_info="$(lbrynet_get "$url")"
+	lbrynet_check_error "$lbrynet_info"
 
-
-	prepare
 
 	mimetype=$(result_value "$lbrynet_info" "mime_type")
 
@@ -596,14 +626,30 @@ get() {
 		done
 	fi
 
+	case "$1" in
+		\#* )
+			is_claim_id=y
+			;;
+		* )
+			url="$(normalize_lbry_url "$1")"
+			if [ "$url" != "$1" ]; then
+				print_info "Resolving $url..."
+			fi
+			;;
+	esac
 
-	url="$(normalize_lbry_url "$1")"
-	if [ "$url" != "$1" ]; then
-		print_info "Resolving $url..."
+
+	lbrynet_start_if_needed
+
+	get_local_lbrynet_config
+
+	if [ -n "$is_claim_id" ]; then
+		claim_info="$(lbrynet_search_claim_id "$1")"
+		url="$(json_value "$claim_info" "canonical_url")"
 	fi
 
-
-	prepare
+	lbrynet_info="$(lbrynet_get "$url")"
+	lbrynet_check_error "$lbrynet_info"
 
 
 
@@ -767,11 +813,11 @@ lbrynet_list_files() {
 		fi
 	fi
 
-#	if [ "$ls_table" = y ]; then
-#		output_command="$output_command | column --table --separator=\\\""
-#	else
-#		output_command="$output_command | sed s/\\\"/\\\t/g"
-#	fi
+	if [ "$ls_table" = y ]; then
+		output_command="$output_command | column --table --separator=\\\""
+	else
+		output_command="$output_command | sed s/\\\"/\\\t/g"
+	fi
 
 	#
 	# $output_command constructed
