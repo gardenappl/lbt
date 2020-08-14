@@ -570,6 +570,7 @@ get() {
 
 	if [ -n "$help" ]; then
 		lbt_help_get
+		exit 0
 	fi
 
 	if [ -n "$quiet" ]; then
