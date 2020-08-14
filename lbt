@@ -65,7 +65,7 @@ lbt_help_ls() {
 	-P, --absolute-path		List absolute paths instead of relative
 	-R, --relative-path		List relative paths, even when piping output
 	-r, --reverse 			Reverse order when sorting
-	-s, --size			List total of the file
+	-s, --no-size			Don't list total of the file
 	--sort KEY 			Sort values by key (name,channel,size,mime,time)
 	-t, --no-time 			Don't list time of first access
 	-T, --table WHEN 		Output result as a table (always,auto,never)"
@@ -647,7 +647,7 @@ lbrynet_list_files() {
 		time_column=1
 		total_columns=$((total_columns + 1))
 	fi
-	if [ -n "$ls_size" ]; then
+	if [ -z "$ls_no_size" ]; then
 		columns="s: .total_bytes, $columns"
 		size_column=1
 		time_column=$((time_column + 1))
@@ -673,7 +673,7 @@ lbrynet_list_files() {
 	fi
 
 	# In all of these cases, we need attributes like $is_full or $is_empty
-	if [ -n "$ls_color" ] || [ -n "$ls_size" ] || [ -n "$ls_full" ] \
+	if [ -n "$ls_color" ] || [ -z "$ls_no_size" ] || [ -n "$ls_full" ] \
 			|| [ -n "$ls_empty" ] || [ -n "$ls_not_empty" ]; then
 		columns="e: .blobs_completed, r: .blobs_remaining, $columns"
 	fi
@@ -687,7 +687,7 @@ lbrynet_list_files() {
 	#no-op pipe, we will build a command on top of it
 	output_command="tee"
 
-	if [ -n "$ls_size" ]; then
+	if [ -z "$ls_no_size" ]; then
 		if [ "$ls_sort" = "size" ]; then
 			if [ -n "$ls_reverse" ]; then
 				sort_params="--reverse"
@@ -926,11 +926,12 @@ lbrynet_list_files() {
 
 lbt_ls() {
 	options=nNPcfFNbmdeERT::sh::rl::t
-	longopts=help,no-path,absolute-path,channel,files,not-files,no-name,blobs,mime-type,full,empty,not-empty,color::,relative-path,table::,size,human-readable::,sort:,reverse,pretty::,time
+	longopts=help,no-path,absolute-path,channel,files,not-files,no-name,blobs,mime-type,full,empty,not-empty,color::,relative-path,table::,no-size,human-readable::,sort:,reverse,pretty::,no-time
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
 #	echo "$@"
 
+	ls_sort="time"
 	while true; do
 		case "$1" in
 			-t|--no-time )
@@ -966,19 +967,19 @@ lbt_ls() {
 			--sort )
 				case "$2" in
 					time )
-						ls_sort=time
+						ls_sort="time"
 						;;
 					name )
-						ls_sort=name
+						ls_sort="name"
 						;;
 					size )
-						ls_sort=size
+						ls_sort="size"
 						;;
 					channel )
-						ls_sort=channel
+						ls_sort="channel"
 						;;
 					mime )
-						ls_sort=mime
+						ls_sort="mime"
 						;;
 					* )
 						print_error "Unknown parameter for --sort: $2"
@@ -1013,8 +1014,8 @@ lbt_ls() {
 				esac
 				shift 2
 				;;	
-			-s|--size )
-				ls_size=y
+			-s|--no-size )
+				ls_no_size=y
 				shift
 				;;
 			-T|--table )
@@ -1176,16 +1177,11 @@ lbt_ls() {
 	if [ "$ls_sort" = "mime" ] && [ -z "$ls_mime_type" ]; then
 		print_error "Error: --sort=mime requires --mime"
 		exit 1
-	elif [ "$ls_sort" = "size" ] && [ -z "$ls_size" ]; then
-		print_error "Error: --sort=size requires --size"
+	elif [ "$ls_sort" = "size" ] && [ -n "$ls_no_size" ]; then
+		print_error "Error: --sort=size argument is incompatible with --no-size"
 		exit 1
 	fi
 	
-	#if [ -z "$ls_sort" ] && [ -n "$ls_reverse" ]; then
-	#	print_error "Error: --reverse requires --sort"
-	#	exit 1
-	#fi
-
 
 	if [ -n "$help" ]; then
 		lbt_help_ls
