@@ -74,6 +74,20 @@ opens an HTTP stream and prints out the URL. This URL can be opened with a brows
 
 downloads the video into your local download directory, and prints out the file name.
 
+### lbt ls
+
+Lists out all LBRY content which is saved on your system. Accepts lots of options for showing/hiding columns of information, sorting, filtering, etc.
+
+Examples:
+
+`lbt get --files`
+
+prints out all LBRY content which is saved in your downloads directory, as opposed to only being stored in blob format.
+
+`lbt get --channel --mime --sort=size --reverse`
+
+prints out additional columns for the channel name and MIME type, and sorts files from largest to smallest.
+
 ## Installation
 
 Just download the `lbt` file and put it into your PATH.
@@ -83,8 +97,8 @@ Just download the `lbt` file and put it into your PATH.
 * LBRY (**you must make sure that `lbrynet` [is in your PATH](https://lbry.com/faq/how-to-cli)**)
 * curl
 * [jq](https://stedolan.github.io/jq/)
-* GNU gettext (for localizations)
-* sed
+* GNU gettext (for localizations, support is incomplete)
+* sed, awk
 * GNU coreutils (cut, ...), util-linux (column, getopt, ...)
 
 
