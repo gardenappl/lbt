@@ -468,7 +468,9 @@ open() {
 
 	if [ -n "$is_claim_id" ]; then
 		claim_info="$(lbrynet_search_claim_id "$1")"
+		print_info "Searching for claim ID... "
 		url="$(json_value "$claim_info" "canonical_url")"
+		print_info "Resolving $url..."
 	fi
 	lbrynet_info="$(lbrynet_get "$url")"
 	lbrynet_check_error "$lbrynet_info"
@@ -646,7 +648,9 @@ get() {
 
 	if [ -n "$is_claim_id" ]; then
 		claim_info="$(lbrynet_search_claim_id "$1")"
+		print_info "Searching for claim ID... "
 		url="$(json_value "$claim_info" "canonical_url")"
+		print_info "Resolving $url..."
 	fi
 
 	lbrynet_info="$(lbrynet_get "$url")"
