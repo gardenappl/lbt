@@ -580,7 +580,7 @@ get() {
 	fi
 
 	if [ -z "$1" ]; then
-		echo "Usage: lbt get URL -f|-s [option...]"
+		echo "Usage: lbt get URL [option...]"
 		echo "Try 'lbt get --help' to get more information"
 		exit 1
 	fi
