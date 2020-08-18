@@ -862,6 +862,7 @@ lbrynet_list_files() {
 					;;
 			esac
 			case "$line" in
+				#claim ID
 				\"i\"* )
 					if [ "$ls_color" = y ]; then
 						printf '\033[38;5;8m%s' "$line"
@@ -869,6 +870,7 @@ lbrynet_list_files() {
 						printf '%s' "$line"
 					fi
 					;;
+				#added on datetime
 				\"a\"* )
 					if [ "$ls_color" = y ]; then
 						printf '\033[38;5;4m%s' "$line"
@@ -876,6 +878,7 @@ lbrynet_list_files() {
 						printf '%s' "$line"
 					fi
 					;;
+				#blobs completed
 				"\"e\": 0" )
 					if [ -n "$ls_not_empty" ]; then
 						printf '""DELETE THIS""'
@@ -890,6 +893,7 @@ lbrynet_list_files() {
 					fi
 					continue
 					;;
+				#blobs remaining
 				"\"r\": 0" )
 					is_full=y
 					continue
@@ -901,6 +905,7 @@ lbrynet_list_files() {
 					fi
 					continue
 					;;
+				#total bytes
 				\"s\"* )
 					if [ -n "$is_full" ]; then
 						# The numbers will be removed later,
@@ -929,6 +934,7 @@ lbrynet_list_files() {
 					# numfmt doesn't have to deal with the escape codes.
 					printf ',\t%s' "$line"
 					;;
+				#MIME type
 				\"m\"* )
 					if [ "$ls_color" = y ]; then
 						printf '\033[38;5;5m%s' "$line"
@@ -936,10 +942,12 @@ lbrynet_list_files() {
 						printf '%s' "$line"
 					fi
 					;;
+				#blobs completed
 				\"b\"* )
 					blobs_completed="$line"
 					continue
 					;;
+				#blobs total
 				\"t\"* )
 					if [ "$ls_color" = y ]; then
 						if [ -n "$is_full" ]; then
@@ -953,6 +961,7 @@ lbrynet_list_files() {
 
 					printf '%s/%s' "$blobs_completed" "$line"
 					;;
+				#channel name
 				"\"c\": null" )
 					;;
 				\"c\"* )
@@ -962,6 +971,7 @@ lbrynet_list_files() {
 						printf '%s' "$line"
 					fi
 					;;
+				#claim name
 				\"n\"* )
 					if [ "$ls_color" = y ]; then
 						if [ -n "$is_full" ]; then
@@ -976,6 +986,7 @@ lbrynet_list_files() {
 						printf '%s' "$line"
 					fi
 					;;
+				#download path
 				"\"p\": null")
 					if [ -n "$ls_files" ]; then
 						printf '""DELETE THIS""'
@@ -994,9 +1005,6 @@ lbrynet_list_files() {
 					elif [ -n "$ls_path" ]; then
 						printf '%s' "$line"
 					fi
-					;;
-				\"h\"* )
-					printf '%s' "$line"
 					;;
 			esac
 			printf ',\t'
