@@ -57,6 +57,7 @@ lbt_help_ls() {
 	-e, --empty			Only list content which has no downloaded blobs
 	-f, --files			Only list content that's saved as a local file
 	-F, --not-files			Only list content that's not saved as a local file
+	    --full-time 		Output time as full time and date
 	-h, --human-readable WHEN 	Output size in human readable units (always,auto,never)
 	    --help			Print help
 	-i, --claim-id 			List claim ID
@@ -70,7 +71,8 @@ lbt_help_ls() {
 	-s, --no-size			Don't list total of the file
 	    --sort KEY 			Sort values by key (name,channel,size,mime,time,claim-id)
 	-t, --no-time 			Don't list time of first access
-	-T, --table WHEN 		Output result as a table (always,auto,never)"
+	-T, --table WHEN 		Output result as a table (always,auto,never)
+	    --unix-time 		Output time as UNIX timestamp (seconds since Jan 1, 1970)"
 }
 
 lbt_help_get() {
@@ -769,24 +771,34 @@ lbrynet_list_files() {
 	fi
 
 	if [ -z "$ls_no_time" ]; then
-		# Set TIME to the content of time_column, without color codes
-		# Replace TIME in time_column with a formatted time string
-		output_command="$output_command | awk \
-			'BEGIN { FS = \"\\\"\"; OFS = \"\\\"\" } { \
-			\
-				TIME = \$$time_column; \
-				CUR_TIME = systime(); \
-			\
-				sub(/\\033\[38;5;\\Sm/,\"\",TIME); \
-			\
-				if (strftime(\"%Y\", TIME) == strftime(\"%Y\", CUR_TIME)) \
-					FORMAT = \"%b %d %R\"; \
-				else \
-					FORMAT = \"%b %d %Y\"; \
-			\
-				sub(TIME, strftime(FORMAT, TIME), \$$time_column); \
-				print \
-			}'"
+		if [ -n "$ls_full_time" ]; then
+			time_style_recent='%Y-%m-%d %H:%M:%S %z'
+			time_style_nonrecent="$time_style_recent"
+		elif [ -z "$ls_unix_time" ]; then
+			time_style_recent='%b %d %R'
+			time_style_nonrecent='%b %d %Y'
+		fi
+
+		if [ -z "$ls_unix_time" ]; then
+			# Set TIME to the content of time_column, without color codes
+			# Replace TIME in time_column with a formatted time string
+			output_command="$output_command | awk \
+				'BEGIN { FS = \"\\\"\"; OFS = \"\\\"\" } { \
+				\
+					TIME = \$$time_column; \
+					CUR_TIME = systime(); \
+				\
+					sub(/\\033\[38;5;\\Sm/,\"\",TIME); \
+				\
+					if (strftime(\"%Y\", TIME) == strftime(\"%Y\", CUR_TIME)) \
+						FORMAT = \"$time_style_recent\"; \
+					else \
+						FORMAT = \"$time_style_nonrecent\"; \
+				\
+					sub(TIME, strftime(FORMAT, TIME), \$$time_column); \
+					print \
+				}'"
+		fi
 	fi
 
 	if [ -n "$ls_claim_id" ]; then
@@ -1018,7 +1030,7 @@ lbrynet_list_files() {
 
 lbt_ls() {
 	options=nNPcfFNbmdeERT::sh::rl::ti
-	longopts=help,no-path,absolute-path,channel,files,not-files,no-name,blobs,mime-type,full,empty,not-empty,color::,relative-path,table::,no-size,human-readable::,sort:,reverse,pretty::,no-time,claim-id
+	longopts=help,no-path,absolute-path,channel,files,not-files,no-name,blobs,mime-type,full,empty,not-empty,color::,relative-path,table::,no-size,human-readable::,sort:,reverse,pretty::,no-time,claim-id,full-time,unix-time
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
 #	echo "$@"
@@ -1026,6 +1038,14 @@ lbt_ls() {
 	ls_sort="time"
 	while true; do
 		case "$1" in
+			--unix-time )
+				ls_unix_time=y
+				shift
+				;;
+			--full-time )
+				ls_full_time=y
+				shift
+				;;
 			-i|--claim-id )
 				ls_claim_id=y
 				shift
@@ -1222,6 +1242,10 @@ lbt_ls() {
 				;;
 		esac
 	done
+
+	check_incompatible "$ls_unix_time" "$ls_full_time" "--unix-time" "--full-time"
+	check_incompatible "$ls_unix_time" "$ls_no_time" "--unix-time" "--no-time"
+	check_incompatible "$ls_no_time" "$ls_full_time" "--no-time" "--full-time"
 
 	check_incompatible "$ls_no_path" "$ls_path" "--no-path" "--absolute-path"
 	check_incompatible "$ls_relative_path" "$ls_path" "--relative-path" "--absolute-path"
