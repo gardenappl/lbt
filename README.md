@@ -103,6 +103,12 @@ will delete the video from your downloads folder, but not from your LBRY library
 
 ## Installation
 
+### Arch Linux
+
+Users of Arch and its derivatives can use the [AUR package](https://aur.archlinux.org/packages/lbt/), maintained by me.
+
+### Other systems
+
 Just download the `lbt` file and put it into your PATH.
 
 **Dependencies:**
