@@ -237,9 +237,10 @@ lbrynet_search_claim_id() {
 }
 
 lbrynet_get_claim_id() {
-	lbrynet_info="$(lbrynet_get "$1")"
+	lbrynet_info="$(curl "$api_server" --silent -d"{\"method\": \"resolve\", \"params\": {\"urls\": [\"$1\"]}}" \
+		| jq '.result|to_entries|.[0]|.value')"
 	lbrynet_check_error "$lbrynet_info"
-	echo "$lbrynet_info" | jq --raw-output '.result.claim_id'
+	echo "$lbrynet_info" | jq --raw-output '.claim_id'
 }
 
 
@@ -1369,7 +1370,14 @@ lbt_rm_single() {
 				;;
 		esac
 		if echo "$result" | grep -q '"download_path": null'; then
-			print_error "$1: not saved as file"
+			case "$1" in
+				\#* )
+					print_error "$1: not saved as file"
+					;;
+				* )
+					print_error "$1: not saved as file (try searching via claim ID?)"
+					;;
+			esac
 			exit 1
 		fi
 		rm "$(echo "$result" | jq --raw-output '.download_path')"
@@ -1398,8 +1406,7 @@ lbt_rm_single() {
 	esac
 	curl_data="$curl_data, \"claim_id\": \"$claim_id\"}}"
 
-	rm_result="$(curl --silent -d"$curl_data" "$api_server")"
-	if echo "$rm_result" | grep -q '"result": false'; then
+	if curl --silent -d"$curl_data" "$api_server" | grep -q '"result": false'; then
 		print_error "Failed to delete $1"
 		exit 1
 	fi
