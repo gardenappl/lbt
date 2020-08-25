@@ -22,7 +22,7 @@ All these tools support lbry:// protocol URLs, as well as [lbry.tv](https://lbry
 
 **lbt open** uses its own configuration file to determine how to open LBRY URLs: which program to use, whether or not the program supports streaming, etc. By default, it uses more minimalist software for specific file formats (video, audio, etc) or just saves them into your downloads folder if it doesn't recognise the file type.
 
-Example of usage (with the default configuration):
+**Example of usage (with the default configuration):**
 
 `lbt open "lbry://@BrodieRobertson#5/easy-motion-how-did-i-use-vim-until-now#9"`
 
@@ -61,7 +61,7 @@ MIME type is text/markdown
 
 **lbt get** is a lower-level utility: instead of opening content with an appropriate program, it simply grabs the needed file from the network and pipes it out. It can also just print out a URL that other programs can use.
 
-Examples:
+**Examples:**
 
 `lbt get "https://lbry.tv/@lbry:3f/julian-chandra-joins-lbry:8" | less`
 
@@ -79,7 +79,7 @@ downloads the video into your local download directory, and prints out the file 
 
 Lists out all LBRY content which is saved on your system. Accepts lots of options for showing/hiding columns of information, sorting, filtering, etc.
 
-Examples:
+**Examples:**
 
 `lbt get --files`
 
@@ -91,7 +91,7 @@ prints out additional columns for the channel name and MIME type, and sorts file
 
 ### lbt rm
 
-Examples:
+**Examples:**
 
 `lbt rm "#aec4347ca0eaefea5eb92d4a51b25451d0581996" --file`
 
