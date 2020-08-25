@@ -90,6 +90,16 @@ lbt_help_get() {
 	-t, --terminal		Enable printing output to the terminal"
 }
 
+lbt_help_rm() {
+	echo \
+"Usage: lbt rm URLs... [options...]
+   or  lbt rm #CLAIM_IDs... [optons...]
+
+	-f, --file 	If content was saved as a file in the downloads directory, delete it
+	-h, --help 	Print help
+	-n, --no-blobs 	Don't remove stored blobs (requires --file)"
+}
+
 
 json_value() {
 	echo "$1" | jq -r ".$2"
@@ -202,6 +212,18 @@ lbrynet_get_save() {
 	curl --silent -d"{\"method\": \"get\", \"params\": {\"uri\": \"$1\", \"save_file\": true}}" "$api_server"
 }
 
+lbrynet_search_claim_id_local() {
+	claim_id="${1#\#}"
+	claim_info="$(curl --silent -d"{\"method\": \"file_list\", \"params\": {\"claim_id\": \"$claim_id\"}}" "$api_server")"
+	lbrynet_check_error "$claim_info"
+
+	if [ "$(result_value "$claim_info" "total_items")" -ne 1 ]; then
+		print_error "Could not find claim with ID $claim_id among saved files"
+		exit 1
+	fi
+	echo "$claim_info" | jq '.result.items|.[]'
+}
+
 lbrynet_search_claim_id() {
 	claim_id="${1#\#}"
 	claim_info="$(curl --silent -d"{\"method\": \"claim_search\", \"params\": {\"claim_id\": \"$claim_id\"}}" "$api_server")"
@@ -212,6 +234,12 @@ lbrynet_search_claim_id() {
 		exit 1
 	fi
 	echo "$claim_info" | jq '.result.items|.[]'
+}
+
+lbrynet_get_claim_id() {
+	lbrynet_info="$(lbrynet_get "$1")"
+	lbrynet_check_error "$lbrynet_info"
+	echo "$lbrynet_info" | jq --raw-output '.result.claim_id'
 }
 
 
@@ -391,7 +419,8 @@ lbt_print_usage() {
 "Available commands:
 	get 	Get content from an LBRY URL
 	ls 	List stored LBRY content
-	open 	Open LBRY content in the user's preferred application"
+	open 	Open LBRY content in the user's preferred application
+	rm 	Delete stored LBRY content"
 }
 
 
@@ -802,7 +831,7 @@ lbrynet_list_files() {
 	fi
 
 	if [ -n "$ls_claim_id" ]; then
-		print_error "$claim_id_column"
+		#print_error "$claim_id_column"
 		output_command="$output_command | awk \
 			'BEGIN { FS = \"\\\"\"; OFS = \"\\\"\" } { \
 			\
@@ -1319,6 +1348,127 @@ lbt_ls() {
 	lbrynet_list_files
 }
 
+
+
+lbt_rm_single() {
+	# Not deleting blobs
+	
+	if [ -n "$rm_no_blobs" ]; then
+		case "$1" in
+			\#* )
+				claim_id="${1#\#}"
+				result="$(lbrynet_search_claim_id_local "$claim_id")"
+				;;
+			* )
+				url="$(normalize_lbry_url "$1")"
+				if [ "$url" != "$1" ]; then
+					print_info "Deleting $url..."
+				fi
+				result="$(lbrynet_get "$url" | jq '.result')"
+				lbrynet_check_error "$result"
+				;;
+		esac
+		if echo "$result" | grep -q '"download_path": null'; then
+			print_error "$1: not saved as file"
+			exit 1
+		fi
+		rm "$(echo "$result" | jq --raw-output '.download_path')"
+		return
+	fi
+
+	# Deleting blobs
+	curl_data='{"method": "file_delete", "params": {"delete_from_download_dir":'
+	if [ -n "$rm_file" ]; then
+		curl_data="$curl_data true"
+	else
+		curl_data="$curl_data false"
+	fi
+
+	case "$1" in
+		\#* )
+			claim_id="${1#\#}"
+			;;
+		* )
+			url="$(normalize_lbry_url "$1")"
+			if [ "$url" != "$1" ]; then
+				print_info "Deleting $url..."
+			fi
+			claim_id="$(lbrynet_get_claim_id "$url")"
+			;;
+	esac
+	curl_data="$curl_data, \"claim_id\": \"$claim_id\"}}"
+
+	rm_result="$(curl --silent -d"$curl_data" "$api_server")"
+	if echo "$rm_result" | grep -q '"result": false'; then
+		print_error "Failed to delete $1"
+		exit 1
+	fi
+}
+
+lbt_rm() {
+	options=hfn
+	longopts=help,file,no-blobs
+	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
+	eval set -- "$parsed"
+#	echo "$@"
+
+	while true; do
+		case "$1" in
+			-h|--help )
+				help=y
+				shift
+				;;
+			-f|--file )
+				rm_file=y
+				shift
+				;;
+			-n|--no-blobs )
+				rm_no_blobs=y
+				shift
+				;;
+			-- )
+				shift
+				break
+				;;
+			* )
+				echo "Programming error"
+				echo "$1"
+				exit 1
+				;;
+		esac
+	done
+
+
+
+	if [ -n "$help" ]; then
+		lbt_help_rm
+		exit 0
+	fi
+
+	if [ -n "$rm_no_blobs" ] && [ -z "$rm_file" ]; then
+		print_error "Error: --no-blobs requires --file"
+		exit 1
+	fi
+
+	if [ -z "$1" ]; then
+		echo "Usage: lbt rm URL [option...]"
+		echo "Try 'lbt rm --help' to get more information"
+		exit 1
+	fi
+
+	lbrynet_start_if_needed
+
+	get_local_lbrynet_config
+
+	while [ -n "$1" ]; do
+		lbt_rm_single "$1"
+		shift
+	done
+}
+
+
+
+
 lbt_help_generic() {
 	echo "Usage: lbt COMMAND..."
 	echo "   or  lbt --help COMMAND..."
@@ -1327,26 +1477,31 @@ lbt_help_generic() {
 
 while true; do
 	case "$1" in
-		"open")
+		"open" )
 			lbt_command="open"
 			shift
 			break
 			;;
-		"get")
+		"get" )
 			lbt_command="get"
 			shift
 			break
 			;;
-		"ls")
+		"ls" )
 			lbt_command="ls"
 			shift
 			break
 			;;
-		"-h"|"--help")
+		"rm" )
+			lbt_command="rm"
+			shift
+			break
+			;;
+		"-h"|"--help" )
 			lbt_help=y
 			shift
 			;;
-		"")
+		"" )
 			lbt_help_generic
 			if [ -n "$lbt_help" ]; then
 				exit 0
@@ -1354,7 +1509,7 @@ while true; do
 				exit 1
 			fi
 			;;
-		*)
+		* )
 			echo "Unknown command: $1"
 			lbt_print_usage
 			exit 1
@@ -1383,6 +1538,13 @@ case "$lbt_command" in
 			exit 0
 		fi
 		lbt_ls "$@"
+		;;
+	rm )
+		if [ -n "$lbt_help" ]; then
+			lbt_help_rm
+			exit 0
+		fi
+		lbt_rm "$@"
 		;;
 	* )
 		echo "Programming error: unknown command??"
