@@ -28,9 +28,9 @@ All these tools support lbry:// protocol URLs, as well as [lbry.tv](https://lbry
 
 opens [this video](https://open.lbry.com/@BrodieRobertson:5/easy-motion-how-did-i-use-vim-until-now:9) in MPV, as a stream.
 
-`lbt open "https://open.lbry.com/@lbry:3f/Jeremy-LBRY-Inc-AMA:4"`
+`lbt open "https://open.lbry.com/@AlexandreMarcotte777:0/brodie-robertson:1"`
 
-downloads [this GIF](https://open.lbry.com/@lbry:3f/Jeremy-LBRY-Inc-AMA:4) and opens it using [imv](https://github.com/eXeC64/imv).
+downloads [this GIF](https://open.lbry.com/@AlexandreMarcotte777:0/brodie-robertson:1) and opens it using [imv](https://github.com/eXeC64/imv).
 
 This behaviour can be changed using a simple config file, namely `~/.config/lbt/mimetypes`. It is based on the file's [MIME type](https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types).
 
