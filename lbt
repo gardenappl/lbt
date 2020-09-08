@@ -920,7 +920,7 @@ lbrynet_list_files() {
 						printf '%s' "$line"
 					fi
 					;;
-				#blobs completed
+				#blobs completed (for filtering, coloring etc)
 				"\"e\": 0" )
 					if [ -n "$ls_not_empty" ]; then
 						printf '""DELETE THIS""'
@@ -935,7 +935,7 @@ lbrynet_list_files() {
 					fi
 					continue
 					;;
-				#blobs remaining
+				#blobs remaining (for filtering, coloring etc)
 				"\"r\": 0" )
 					is_full=y
 					continue
@@ -1041,7 +1041,7 @@ lbrynet_list_files() {
 					if [ -n "$ls_not_files" ]; then
 						printf '""DELETE THIS""'
 					elif [ -n "$ls_relative_path" ]; then
-						filename="$(echo "$line" | cut -d' ' -f2)"
+						filename="$(echo "$line" | cut -d' ' -f2-)"
 						filename="$(trim_quotes "$filename")"
 						printf '%s' "$(realpath --relative-base="$PWD" "$filename")"
 					elif [ -n "$ls_path" ]; then
