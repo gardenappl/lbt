@@ -109,7 +109,7 @@ Users of Arch and its derivatives can use the [AUR package](https://aur.archlinu
 
 ### Other systems
 
-Just download the `lbt` file and put it into your PATH.
+Grab the latest version of `lbt` on the [Releases page](https://gitlab.com/gardenappl/lbt/-/releases). Extract the `lbt` file and put it into your PATH.
 
 **Dependencies:**
 
@@ -123,7 +123,7 @@ Just download the `lbt` file and put it into your PATH.
 
 If you want to use `lbt open` as the default handler for lbry:// links:
 
-1. Download the `lbt-open.desktop` file.
+1. Get the `lbt-open.desktop` file.
 2. Put it into `~/.local/share/applications`
 3. Run `xdg-mime default lbt-open.desktop x-scheme-handler/lbry`
 
