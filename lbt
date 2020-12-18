@@ -6,6 +6,8 @@ set -o errexit
 lbrynet_local=y
 config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
 
+VERSION='1.0.2'
+
 
 mkdir -p "$config_dir"
 
@@ -202,6 +204,10 @@ get_local_lbrynet_config() {
 #	streaming_server=$(json_value "$lbrynet_config" "streaming_server")
 	api_server=$(json_value "$lbrynet_config" "api")
 #	download_dir=$(json_value "$lbrynet_config" "download_dir")
+}
+
+lbrynet_version() {
+	curl --silent -d"{\"method\": \"version\"}" "$api_server"
 }
 
 lbrynet_get() {
@@ -1484,7 +1490,21 @@ lbt_rm() {
 lbt_help_generic() {
 	echo "Usage: lbt COMMAND..."
 	echo "   or  lbt --help COMMAND..."
+	echo "   or  lbt --version"
 	lbt_print_usage			
+}
+
+lbt_version() {
+	if [ -t 1 ]; then
+		printf '\033[1m%s\033[m\n' "lbt $VERSION"
+	else
+		echo "lbt $VERSION"
+	fi
+	echo "LBRY daemon info:"
+
+	lbrynet_start_if_needed
+	get_local_lbrynet_config
+	lbrynet_version | jq '.result'
 }
 
 while true; do
@@ -1513,12 +1533,21 @@ while true; do
 			lbt_help=y
 			shift
 			;;
+		'-v'|'--version' )
+			lbt_version=y
+			shift
+			;;
 		"" )
-			lbt_help_generic
-			if [ -n "$lbt_help" ]; then
+			if [ -n "$lbt_version" ]; then
+				lbt_version
 				exit 0
 			else
-				exit 1
+				lbt_help_generic
+				if [ -n "$lbt_help" ] || [ -n "$lbt_version" ]; then
+					exit 0
+				else
+					exit 1
+				fi
 			fi
 			;;
 		* )
@@ -1528,6 +1557,10 @@ while true; do
 			;;
 	esac
 done
+
+if [ -n "$lbt_version" ]; then
+	lbt_version
+fi
 
 case "$lbt_command" in
 	open )
