@@ -294,17 +294,23 @@ check_incompatible() {
 
 
 normalize_lbry_url() {
+	sed_command='s/%3A/\#/g; s/%40/@/g; s/%23/\#/g'
 	case "$1" in
 		https://lbry.tv/* | http://lbry.tv/* )
-			echo "$1" | sed 's/\:/\#/g; s|.*lbry\.tv/|lbry://|'
+			sed_command="$sed_command; s|.*lbry\.tv/||"
 			;;
 		https://open.lbry.com/* | http://open.lbry.com/* )
-			echo "$1" | sed 's/\:/\#/g; s|.*lbry\.com/|lbry://|'
+			sed_command="$sed_command; s|.*open\.lbry\.com/||"
+			;;
+		https://odysee.com/* | http://odysee.com/* )
+			sed_command="$sed_command; s|.*odysee\.com/||"
 			;;
 		*)
-			echo "$1"
+			sed_command="$sed_command; s|lbry://||"
 			;;
 	esac
+	sed_command="$sed_command; s/:/#/g; s|^|lbry://|"
+	echo "$1" | sed "$sed_command"
 }
 
 download() {
@@ -887,7 +893,7 @@ lbrynet_list_files() {
 	esac
 
 	while [ $page -le $total_pages ]; do
-		list_info="$(curl --silent -d"{\"method\": \"file_list\", \"params\": {\"page\": $page, \"page_size\": 100000$list_params}}" "$api_server")"
+		list_info="$(curl --silent -d"{\"method\": \"file_list\", \"params\": {\"page\": $page, \"page_size\": 100$list_params}}" "$api_server")"
 		lbrynet_check_error "$list_info"
 
 
