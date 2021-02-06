@@ -18,7 +18,7 @@ if [ ! -f "$config_dir/mimetypes" ]; then
 
 # First column is a glob pattern for matching MIME types.
 # Second column is the action: "save" means that the file must be downloaded before opening, "stream" means that the program can open the file as an HTTP stream.
-# Third column is the program to launch. $1 is the stream URL/path to file, $mimetype is the MIME type. Can be left empty if the second column says "safe"
+# Third column is the program to launch. $1 is the stream URL/path to file, $mimetype is the MIME type. Can be left empty if the second column says "save"
 
 #Uncomment this if you want to open files using XDG default applications:
 #video/*	stream	gtk-launch $(xdg-mime query default $mimetype) "$1"
