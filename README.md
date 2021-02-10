@@ -81,11 +81,11 @@ Lists out all LBRY content which is saved on your system. Accepts lots of option
 
 **Examples:**
 
-`lbt get --files`
+`lbt ls --files`
 
 prints out all LBRY content which is saved in your downloads directory, as opposed to only being stored in blob format.
 
-`lbt get --channel --mime --sort=size --reverse`
+`lbt ls --channel --mime --sort=size --reverse`
 
 prints out additional columns for the channel name and MIME type, and sorts files from largest to smallest.
 
