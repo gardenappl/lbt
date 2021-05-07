@@ -31,7 +31,7 @@ audio/*		stream	mpv "$1"
 image/*		save	imv "$1"
 text/html	stream	$BROWSER "$1"
 application/pdf	save	zathura "$1"
-*		save' 
+*		save' \
 	> "$config_dir/mimetypes"
 fi
 
