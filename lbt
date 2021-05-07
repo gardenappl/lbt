@@ -92,6 +92,17 @@ lbt_help_get() {
 	-t, --terminal		Enable printing output to the terminal"
 }
 
+lbt_help_feed() {
+	echo \
+"Usage: lbt feed CHANNEL_URLs... [options...]
+   or  lbt feed #CLAIM_IDs... [optons...]
+
+	-h, --help 		Print help
+	-n, --pages N		Show N pages worth of content instead of 1
+	-p, --start-page N 	Show content starting from Nth page
+	-s, --sfeed 		Output feed in sfeed format"
+}
+
 lbt_help_rm() {
 	echo \
 "Usage: lbt rm URLs... [options...]
@@ -430,6 +441,7 @@ handle_lbry_url() {
 lbt_print_usage() {
 	echo \
 "Available commands:
+	feed 	See the latest content from LBRY channels
 	get 	Get content from an LBRY URL
 	ls 	List stored LBRY content
 	open 	Open LBRY content in the user's preferred application
@@ -1486,6 +1498,132 @@ lbt_rm() {
 
 
 
+feed() {
+	options=hsp:n:
+	longopts=help,sfeed,start-page:,pages:
+	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
+	eval set -- "$parsed"
+#	echo "$@"
+
+	while true; do
+		case "$1" in
+			-h|--help )
+				help=y
+				shift
+				;;
+			-s|--sfeed )
+				feed_sfeed=y
+				shift
+				;;
+			-p|--start-page )
+				feed_start_page="$2"
+				shift 2
+				;;
+			-n|--pages )
+				feed_pages="$2"
+				shift 2
+				;;
+			-- )
+				shift
+				break
+				;;
+			* )
+				echo "Programming error"
+				echo "$1"
+				exit 1
+				;;
+		esac
+	done
+
+
+
+	if [ -n "$help" ]; then
+		lbt_help_feed
+		exit 0
+	fi
+
+	if [ -z "$1" ]; then
+		echo "Usage: lbt feed CHANNEL [option...]"
+		echo "Try 'lbt rm --help' to get more information"
+		exit 1
+	fi
+
+	
+
+	lbrynet_start_if_needed
+
+	get_local_lbrynet_config
+
+	# Make list of claim IDs in the format '"1234abc", "5678def"'
+	for i in "$@"; do
+		case "$i" in
+			\#* )
+				claim_id="${i#\#}"
+				;;
+			* )
+				url="$(normalize_lbry_url "$i")"
+				claim_id="$(lbrynet_get_claim_id "$url")"
+				;;
+		esac
+		if [ -z "$channel_id_list" ]; then
+			channel_id_list="\"$claim_id\""
+		else
+			channel_id_list="$channel_id_list, \"$claim_id\""
+		fi
+	done
+
+	# Construct JQ command which will format JSON data
+	if [ -n "$feed_sfeed" ]; then
+		jq_command='.result.items| .[] | 
+			select(.value_type == "stream") | [
+				.value.release_time,
+				.value.title,
+				.short_url,
+				.value.description,
+				"plain",
+				.permanent_url,
+				.signing_channel.name,
+				null,
+				(.value.tags // [] | join("|"))
+			] | @tsv'
+	else
+		jq_command='.result.items| .[] | 
+			select(.value_type == "stream") | [
+				"",
+				(.value.release_time | tonumber | gmtime | strflocaltime("%Y-%m-%d %R")),
+				.signing_channel.name,
+				.value.title,
+				.short_url
+			] | @tsv'
+	fi
+
+	feed_pages="${feed_pages:-1}"
+	feed_start_page="${feed_start_page:-1}"
+	page="${feed_start_page:-1}"
+
+	# Output JSON data to jq command
+	while [ "$page" -lt $(("$feed_start_page" + "$feed_pages")) ]; do
+		claim_info="$(curl --silent -d"{\
+			\"method\": \"claim_search\",\
+			\"params\": {\
+				\"page\": $page,\
+				\"channel_ids\": [ $channel_id_list ],\
+				\"valid_channel_signature\": true,\
+				\"no_totals\": true,\
+				\"order_by\": \"release_time\"\
+			}}" "$api_server")"
+		lbrynet_check_error "$claim_info"
+		echo "$claim_info" | jq --raw-output "$jq_command"
+		page=$(("$page" + 1))
+	done | if [ -z "$feed_sfeed" ]; then
+		column --table --separator $'\t'
+	else
+		# no-op
+		tee
+	fi
+}
+
+
 
 lbt_help_generic() {
 	echo "Usage: lbt COMMAND..."
@@ -1526,6 +1664,11 @@ while true; do
 			;;
 		"rm" )
 			lbt_command="rm"
+			shift
+			break
+			;;
+		"feed" )
+			lbt_command="feed"
 			shift
 			break
 			;;
@@ -1590,6 +1733,13 @@ case "$lbt_command" in
 			exit 0
 		fi
 		lbt_rm "$@"
+		;;
+	feed )
+		if [ -n "$lbt_help" ]; then
+			lbt_help_feed
+			exit 0
+		fi
+		feed "$@"
 		;;
 	* )
 		echo "Programming error: unknown command??"

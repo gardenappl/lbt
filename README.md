@@ -5,11 +5,12 @@
 Currently, there are four tools available:
 
 * **lbt open** will open LBRY content in the user's preferred application. (think *xdg-open but for LBRY*)
-* **lbt get** will simply fetch LBRY content and output it, either into a file or into standard output. (think *wget but for LBRY*)
+* **lbt feed** is a very simple way to see the latest content from LBRY channels. (think [sfeed](https://codemadness.org/sfeed-simple-feed-parser.html) *but for LBRY*)
 * **lbt ls** will list all LBRY content that's saved on this system.
+* **lbt get** will simply fetch LBRY content and output it, either into a file or into standard output. (think *wget but for LBRY*)
 * **lbt rm** will delete saved LBRY content.
 
-All these tools support lbry:// protocol URLs, as well as [lbry.tv](https://lbry.tv) and [open.lbry.com](https://open.lbry.com) links.
+All these tools support lbry:// protocol URLs, as well as [Odysee](https://odysee.com) and [open.lbry.com](https://open.lbry.com) links.
 
 ## Why?
 
@@ -75,9 +76,40 @@ opens an HTTP stream and prints out the URL. This URL can be opened with a brows
 
 downloads the video into your local download directory, and prints out the file name.
 
+### lbt feed
+
+Output the latest content from LBRY channels.
+
+**Examples:**
+
+`lbt feed 'https://odysee.com/@BrodieRobertson:5' 'https://odysee.com/@christitustech:5'`
+
+prints this:
+
+```
+  2021-05-07 13:15  @christitustech   This is the future...                                 lbry://this-is-the-future...#2
+  2021-05-06 21:00  @BrodieRobertson  Is Rambox An Even Better Messaging Browser?           lbry://is-rambox-an-even-better-messaging#1
+  2021-05-05 21:00  @BrodieRobertson  Wayland Is The Future Of Linux, What About Now?       lbry://wayland-is-the-future-of-linux,-what#5
+  2021-05-04 21:00  @BrodieRobertson  Trackma Is The Best Way To Track My Anime             lbry://trackma-is-the-best-way-to-track-my#6
+  2021-05-03 21:00  @BrodieRobertson  Xinitrc, Xprofile And More, What Do They All Do       lbry://xinitrc,-xprofile-and-more,-what-do-they#6
+  2021-05-03 15:33  @christitustech   First Install of Rocky Linux LIVE!                    lbry://rocky-linux-live-install#1
+  2021-05-02 21:00  @BrodieRobertson  YouTube Is Still Being DESTROYED By Spam Bots         lbry://youtube-is-still-being-destroyed-by-spam#7
+
+...
+```
+
+Just for fun, I made it so that output is compatible with [sfeed_plain](https://codemadness.org/sfeed-simple-feed-parser.html).
+
+You can also get raw "sfeed"-style output with the `--sfeed` option, which allows you to do things like:
+
+`lbt feed 'lbry://@ashesashescast#f' --sfeed | sfeed_curses`
+
+![lbt + sfeed_curses](lbt-sfeed.png lbt + sfeed curses)
+
+
 ### lbt ls
 
-Lists out all LBRY content which is saved on your system. Accepts lots of options for showing/hiding columns of information, sorting, filtering, etc.
+Lists all LBRY content which is saved on your system. Accepts lots of options for showing/hiding columns of information, sorting, filtering, etc.
 
 **Examples:**
 
@@ -131,8 +163,5 @@ If you want to use `lbt open` as the default handler for lbry:// links:
 
 Unimplemented features:
 
-1. Commands for interacting with channels
-2. Interacting with paid content.
-3. Working with remote `lbrynet` daemons.
-
-At some point, I'd like to build a "companion app" for lbt, using the [ncurses library](https://en.wikipedia.org/wiki/Ncurses). It would use the same config files, but featuring a full-fledged TUI instead of just a command-line interface.
+1. Interacting with paid content.
+2. Working with remote `lbrynet` daemons.
