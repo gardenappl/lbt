@@ -12,6 +12,8 @@ Currently, there are four tools available:
 
 All these tools support lbry:// protocol URLs, as well as [Odysee](https://odysee.com) and [open.lbry.com](https://open.lbry.com) links.
 
+lbt can also convert **some YouTube video links** to LBRY videos automatically, if the creator uses the official [LBRY x YouTube Sync service](https://lbry.com/youtube).
+
 ## Why?
 
 **lbt** might be useful if:
