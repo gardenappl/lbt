@@ -6,6 +6,8 @@ set -o errexit
 lbrynet_local=y
 config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
 
+api_lbry_com="https://api.lbry.com"
+
 VERSION='1.0.4'
 
 
@@ -310,7 +312,35 @@ check_incompatible() {
 }
 
 
+get_lbry_url_from_youtube() {
+	printf_info "%s: querying LBRY x YouTube Sync service... " "$1"
+	lbry_url="$(curl "$api_lbry_com/yt/resolve?video_ids=$1" --max-time 10 --silent | jq ".data.videos[\"$1\"]" --raw-output)"
+	if [ "$lbry_url" = "null" ]; then
+		print_error "LBRY video for $1 not found."
+		exit 1
+	else
+		print_info "Done."
+	fi
+	echo "$lbry_url"
+}
+
+
 normalize_lbry_url() {
+	case "$1" in
+		*youtube*/watch* )
+			get_lbry_url_from_youtube "$(echo "$1" | sed 's|.*[\?&]v=||; s|&.*||')"
+			return
+			;;
+		*youtube*/v/* )
+			get_lbry_url_from_youtube "$(echo "$1" | sed 's|.*/v/||; s|[?&].*||')"
+			return 
+			;;
+		*youtu.be/* )
+			get_lbry_url_from_youtube "${1##https://youtu.be/}"
+			return
+			;;
+	esac
+
 	sed_command='s/%3A/\#/g; s/%40/@/g; s/%23/\#/g; s/?.*//'
 	case "$1" in
 		https://lbry.tv/* | http://lbry.tv/* )

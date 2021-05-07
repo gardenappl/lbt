@@ -165,3 +165,4 @@ Unimplemented features:
 
 1. Interacting with paid content.
 2. Working with remote `lbrynet` daemons.
+3. Localization.
