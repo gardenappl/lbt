@@ -88,7 +88,7 @@ Output the latest content from LBRY channels.
 
 prints this:
 
-![lbt feed output](lbt-feed.png lbt feed output)
+![lbt feed output](lbt-feed.png "lbt feed output")
 
 It can also read channel names or URLs from a configuration file (`~/.config/lbt/feeds`).
 
@@ -96,7 +96,7 @@ Just for fun, you can also output data in a format compatible with [sfeed](https
 
 `lbt feed @BrodieRobertson @DistroTube --sfeed | sfeed_curses`
 
-![lbt + sfeed_curses](lbt-sfeed.png lbt + sfeed curses)
+![lbt + sfeed_curses](lbt-sfeed.png "lbt + sfeed curses")
 
 Alternatively, a simple dmenu/bemenu script:
 
