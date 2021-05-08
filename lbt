@@ -103,7 +103,9 @@ lbt_help_feed() {
 	-h, --help 		Print help
 	-n, --pages N		Show N pages worth of content instead of 1
 	-p, --start-page N 	Show content starting from Nth page
-	-s, --sfeed 		Output feed in sfeed format"
+	-s, --sfeed 		Output feed in sfeed format
+	-S, --plain 		Output feed in sfeed_plain format
+	-t, --time 		Always show release date and time"
 }
 
 lbt_help_rm() {
@@ -1530,8 +1532,8 @@ lbt_rm() {
 
 
 feed() {
-	options=hsp:n:c::
-	longopts=help,sfeed,start-page:,pages:,color::
+	options=hsp:n:c::Sdt
+	longopts=help,sfeed,start-page:,pages:,color::,plain,time
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
 #	echo "$@"
@@ -1544,6 +1546,14 @@ feed() {
 				;;
 			-s|--sfeed )
 				feed_sfeed=y
+				shift
+				;;
+			-S|--plain )
+				feed_sfeed_plain=y
+				shift
+				;;
+			-t|--time )
+				feed_time=y
 				shift
 				;;
 			-p|--start-page )
@@ -1594,6 +1604,11 @@ feed() {
 	lbrynet_start_if_needed
 
 	get_local_lbrynet_config
+
+	check_incompatible "$feed_sfeed" "$feed_sfeed_plain" "--sfeed" "--plain"
+	if [ -n "$feed_sfeed_plain" ]; then
+		feed_time=y
+	fi
 
 	# Assume that channel names, URLs, claim IDs can't have spaces...
 	if [ -n "$1" ]; then
@@ -1647,8 +1662,8 @@ feed() {
 	if [ -n "$feed_sfeed" ]; then
 		jq_command='.result.items| .[] | 
 			select(.value_type == "stream") | [
-				.value.release_time,
-				.value.title,
+				.value.release_time // 0,
+				( .value.title | gsub("\\s+"; " ")),
 				.short_url,
 				.value.description,
 				"plain",
@@ -1660,7 +1675,7 @@ feed() {
 	else
 		jq_command='.result.items| .[] | 
 			select(.value_type == "stream") | [
-				(.value.release_time // 0 | tonumber | gmtime | strflocaltime("%Y-%m-%d %R")),
+				.value.release_time // 0,
 				.signing_channel.name,
 				.value.video.duration // .value.audio.duration // "",
 				.value.title,
@@ -1694,26 +1709,59 @@ feed() {
 				minutes=int(seconds/60);
 				hours=int(minutes/60);
 				if (hours > 0) {
-					time=sprintf("(%02i:", hours%60);
+					duration=sprintf("(%02i:", hours%60);
 				} else {
-					time="(";
+					duration="(";
 				}
-				time=sprintf("%s%02i:%02i) ", time, minutes%60, seconds%60);
+				duration=sprintf("%s%02i:%02i) ", duration, minutes%60, seconds%60);
 			} else {
-				time=""
+				duration="";
+			}
+
+			if (sfeed_plain && length($4) > 70) {
+				name=substr($4, 1, 69)"…";
+			} else {
+				name=$4;
+			}
+
+			if (sfeed_plain && length($1) > 15) {
+				channel=substr($1, 1, 14)"…";
+			} else {
+				channel=$2;
+			}
+
+			if (show_time) {
+				time=strftime("%Y-%m-%d %H:%M", $1);
+				if (sfeed_plain) {
+					if (systime() - $1 < 60*60*24) {
+						if (color == "y") {
+							# Make timestamp bold
+							time="\033[1mN "time;
+						} else {
+							time="N "time;
+						}
+					} else {
+						time="  "time;
+					}
+				}
 			}
 
 			# Blue timestamp, bold cyan channel name, green duration + bold green title, 
 			# reset for URL
 			if (color == "y") {
-				print "\033[38;5;4m"$1,
-				      "\033[1m\033[38;5;6m"$2,
-				      "\033[m\033[38;5;2m"time"\033[1m"$4,
+				if (show_time) {
+					printf "\033[38;5;4m"(time)(OFS);
+				}
+				print "\033[1m\033[38;5;6m"channel,
+				      "\033[m\033[38;5;2m"duration"\033[1m"name,
 				      "\033[m"$5;
 			} else {
-				print $1, $2, time$4, $5;
+				if (show_time) {
+					printf (time)(OFS);
+				}
+				print channel, (duration)(name), $5;
 			}
-		}' color="$feed_color" \
+		}' color="$feed_color" sfeed_plain="$feed_sfeed_plain" show_time="$feed_time" \
 			| column --table --separator "$(printf '\t')"
 	else
 		# no-op
