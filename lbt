@@ -8,7 +8,7 @@ config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
 
 api_lbry_com="https://api.lbry.com"
 
-VERSION='1.1'
+VERSION='1.1.1'
 
 
 mkdir -p "$config_dir"
