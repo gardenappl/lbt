@@ -84,30 +84,23 @@ Output the latest content from LBRY channels.
 
 **Examples:**
 
-`lbt feed 'https://odysee.com/@BrodieRobertson:5' 'https://odysee.com/@christitustech:5'`
+`lbt feed 'https://odysee.com/@ashesashescast:f'`
 
 prints this:
 
-```
-  2021-05-07 13:15  @christitustech   This is the future...                                 lbry://this-is-the-future...#2
-  2021-05-06 21:00  @BrodieRobertson  Is Rambox An Even Better Messaging Browser?           lbry://is-rambox-an-even-better-messaging#1
-  2021-05-05 21:00  @BrodieRobertson  Wayland Is The Future Of Linux, What About Now?       lbry://wayland-is-the-future-of-linux,-what#5
-  2021-05-04 21:00  @BrodieRobertson  Trackma Is The Best Way To Track My Anime             lbry://trackma-is-the-best-way-to-track-my#6
-  2021-05-03 21:00  @BrodieRobertson  Xinitrc, Xprofile And More, What Do They All Do       lbry://xinitrc,-xprofile-and-more,-what-do-they#6
-  2021-05-03 15:33  @christitustech   First Install of Rocky Linux LIVE!                    lbry://rocky-linux-live-install#1
-  2021-05-02 21:00  @BrodieRobertson  YouTube Is Still Being DESTROYED By Spam Bots         lbry://youtube-is-still-being-destroyed-by-spam#7
+![lbt feed output](lbt-feed.png lbt feed output)
 
-...
-```
+It can also read channel names or URLs from a configuration file (`~/.config/lbt/feeds`).
 
-Just for fun, I made it so that output is compatible with [sfeed_plain](https://codemadness.org/sfeed-simple-feed-parser.html).
+Just for fun, you can also output data in a format compatible with [sfeed](https://codemadness.org/sfeed-simple-feed-parser.html) or sfeed_plain. This allows you to do cool things, like:
 
-You can also get raw "sfeed"-style output with the `--sfeed` option, which allows you to do things like:
-
-`lbt feed 'lbry://@ashesashescast#f' --sfeed | sfeed_curses`
+`lbt feed @BrodieRobertson @DistroTube --sfeed | sfeed_curses`
 
 ![lbt + sfeed_curses](lbt-sfeed.png lbt + sfeed curses)
 
+Alternatively, a simple dmenu/bemenu script:
+
+`lbt open "$(lbt feed | bemenu --list=10 | sed 's|^.*lbry://||')"`
 
 ### lbt ls
 
