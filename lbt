@@ -96,9 +96,10 @@ lbt_help_get() {
 
 lbt_help_feed() {
 	echo \
-"Usage: lbt feed CHANNEL_URLs... [options...]
-   or  lbt feed #CLAIM_IDs... [optons...]
+"Usage: lbt feed... [options...]
+   or  lbt feed CHANNELs... [optons...]
 
+	-c, --color WHEN 	Output result with color (always,auto,never)
 	-h, --help 		Print help
 	-n, --pages N		Show N pages worth of content instead of 1
 	-p, --start-page N 	Show content starting from Nth page
@@ -1529,8 +1530,8 @@ lbt_rm() {
 
 
 feed() {
-	options=hsp:n:
-	longopts=help,sfeed,start-page:,pages:
+	options=hsp:n:c::
+	longopts=help,sfeed,start-page:,pages:,color::
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
 #	echo "$@"
@@ -1553,6 +1554,22 @@ feed() {
 				feed_pages="$2"
 				shift 2
 				;;
+			-c|--color )
+				case "$2" in
+					"" )
+						feed_color=y
+						;;
+					always )
+						feed_color=y
+						;;
+					auto )
+						;;
+					never )
+						feed_color=n
+						;;
+				esac
+				shift 2
+				;;
 			-- )
 				shift
 				break
@@ -1572,26 +1589,36 @@ feed() {
 		exit 0
 	fi
 
-	if [ -z "$1" ]; then
-		echo "Usage: lbt feed CHANNEL [option...]"
-		echo "Try 'lbt rm --help' to get more information"
-		exit 1
-	fi
-
 	
 
 	lbrynet_start_if_needed
 
 	get_local_lbrynet_config
 
-	# Make list of claim IDs in the format '"1234abc", "5678def"'
-	for i in "$@"; do
-		case "$i" in
+	# Assume that channel names, URLs, claim IDs can't have spaces...
+	if [ -n "$1" ]; then
+		input_channels="$*"
+	else
+		if [ ! -e "$config_dir/feeds" ]; then
+			if [ -t 0 ]; then
+				print_info "Note: missing file $config_dir/feeds"
+				print_info "and no channels are provided in arguments."
+				print_info
+				print_info "Enter channels into standard input (Ctrl+D to finish):"
+			fi
+			input_channels="$(tee)"
+		else
+			input_channels="$(cat "$config_dir/feeds")"
+		fi
+	fi 
+	for channel in $input_channels; do
+		# Make list of claim IDs in the format '"1234abc", "5678def"'
+		case "$channel" in
 			\#* )
-				claim_id="${i#\#}"
+				claim_id="{$channel#\#}"
 				;;
 			* )
-				url="$(normalize_lbry_url "$i")"
+				url="$(normalize_lbry_url "$channel")"
 				claim_id="$(lbrynet_get_claim_id "$url")"
 				;;
 		esac
@@ -1601,6 +1628,20 @@ feed() {
 			channel_id_list="$channel_id_list, \"$claim_id\""
 		fi
 	done
+
+	if [ "$feed_color" = y ] && [ -n "$feed_sfeed" ]; then
+		print_error "Error: --color=always argument is incompatible with --sfeed"
+		exit 1
+	fi
+
+	if [ -z "$feed_color" ]; then
+		# output is a TTY and not outputting in sfeed format
+		if [ -t 1 ] && [ -z "$feed_sfeed" ]; then
+			feed_color=y
+		else
+			feed_color=n
+		fi
+	fi
 
 	# Construct JQ command which will format JSON data
 	if [ -n "$feed_sfeed" ]; then
@@ -1620,7 +1661,7 @@ feed() {
 		jq_command='.result.items| .[] | 
 			select(.value_type == "stream") | [
 				"",
-				(.value.release_time | tonumber | gmtime | strflocaltime("%Y-%m-%d %R")),
+				(.value.release_time // 0 | tonumber | gmtime | strflocaltime("%Y-%m-%d %R")),
 				.signing_channel.name,
 				.value.title,
 				.short_url
@@ -1645,12 +1686,26 @@ feed() {
 		lbrynet_check_error "$claim_info"
 		echo "$claim_info" | jq --raw-output "$jq_command"
 		page=$(("$page" + 1))
-	done | if [ -z "$feed_sfeed" ]; then
-		column --table --separator $'\t'
-	else
-		# no-op
-		tee
-	fi
+	done \
+		| if [ "$feed_color" = y ]; then
+			# Blue timestamp, bold cyan channel name, bold green title, 
+			# reset for URL
+			awk 'BEGIN { FS="\t"; OFS="\t" };
+				{ print $1,
+					"\033[38;5;4m"$2,
+					"\033[1m\033[38;5;6m"$3,
+				        "\033[38;5;2m"$4,
+					"\033[m"$5
+				}'
+		else
+			tee
+		fi \
+		| if [ -z "$feed_sfeed" ]; then
+			column --table --separator "$(printf '\t')"
+		else
+			# no-op
+			tee
+		fi
 }
 
 
