@@ -8,7 +8,7 @@ config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
 
 api_lbry_com="https://api.lbry.com"
 
-VERSION='1.1.1'
+VERSION='1.1.2'
 
 
 mkdir -p "$config_dir"
@@ -276,10 +276,6 @@ is_download_complete() {
 			;;
 	esac
 }
-
-#get_suggested_file_name() {
-#        printf '%s' "$lbrynet_info" | awk '/suggested_file_name/{print substr($2, 2, length($2)-3)}'
-#}
 
 print_info() {
 	if [ -z "$quiet" ]; then
