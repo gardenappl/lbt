@@ -120,11 +120,11 @@ lbt_help_rm() {
 
 
 json_value() {
-	echo "$1" | jq -r ".$2"
+	printf '%s' "$1" | jq -r ".$2"
 }
 
 result_value() {
-	echo "$1" | jq -r ".result.$2"
+	printf '%s' "$1" | jq -r ".result.$2"
 }
 
 # from dylanaraps' Pure Sh Bible, MIT License
@@ -243,7 +243,7 @@ lbrynet_search_claim_id_local() {
 		print_error "Could not find claim with ID $claim_id among saved files"
 		exit 1
 	fi
-	echo "$claim_info" | jq '.result.items|.[]'
+	printf '%s' "$claim_info" | jq '.result.items|.[]'
 }
 
 lbrynet_search_claim_id() {
@@ -255,14 +255,14 @@ lbrynet_search_claim_id() {
 		print_error "Could not find claim with ID $claim_id"
 		exit 1
 	fi
-	echo "$claim_info" | jq '.result.items|.[]'
+	printf '%s' "$claim_info" | jq '.result.items|.[]'
 }
 
 lbrynet_get_claim_id() {
 	lbrynet_info="$(curl "$api_server" --silent -d"{\"method\": \"resolve\", \"params\": {\"urls\": [\"$1\"]}}" \
 		| jq '.result|to_entries|.[0]|.value')"
 	lbrynet_check_error "$lbrynet_info"
-	echo "$lbrynet_info" | jq --raw-output '.claim_id'
+	printf '%s' "$lbrynet_info" | jq --raw-output '.claim_id'
 }
 
 
@@ -278,14 +278,13 @@ is_download_complete() {
 }
 
 #get_suggested_file_name() {
-#        echo "$lbrynet_info" | awk '/suggested_file_name/{print substr($2, 2, length($2)-3)}'
+#        printf '%s' "$lbrynet_info" | awk '/suggested_file_name/{print substr($2, 2, length($2)-3)}'
 #}
 
 print_info() {
 	if [ -z "$quiet" ]; then
 		>&2 echo "$@"
 	fi
-	#echo "$@"
 }
 
 print_error() {
@@ -324,18 +323,18 @@ get_lbry_url_from_youtube() {
 	else
 		print_info "Done."
 	fi
-	echo "$lbry_url"
+	printf '%s' "$lbry_url"
 }
 
 
 normalize_lbry_url() {
 	case "$1" in
 		*youtube*/watch* )
-			get_lbry_url_from_youtube "$(echo "$1" | sed 's|.*[\?&]v=||; s|&.*||')"
+			get_lbry_url_from_youtube "$(printf '%s' "$1" | sed 's|.*[\?&]v=||; s|&.*||')"
 			return
 			;;
 		*youtube*/v/* )
-			get_lbry_url_from_youtube "$(echo "$1" | sed 's|.*/v/||; s|[?&].*||')"
+			get_lbry_url_from_youtube "$(printf '%s' "$1" | sed 's|.*/v/||; s|[?&].*||')"
 			return 
 			;;
 		*youtu.be/* )
@@ -360,15 +359,11 @@ normalize_lbry_url() {
 			;;
 	esac
 	sed_command="$sed_command; s/:/#/g; s|^|lbry://|"
-	echo "$1" | sed "$sed_command"
+	printf '%s' "$1" | sed "$sed_command"
 }
 
 download() {
 	printf_info "Downloading..."
-	# suggested_file_name=$(result_value "$lbrynet_info" "suggested_file_name")
-	# echo "Suggested file name is $suggested_file_name"
-
-	# echo "$sd_hash"
 
 	while true; do
 		lbrynet_info="$(lbrynet_get_save "$1")"
@@ -420,7 +415,7 @@ lbry_get_url() {
 }
 
 do_mimetype_action() {
-	mimetype_action=$(echo "$1" | cut -d' ' -f2)
+	mimetype_action=$(printf '%s' "$1" | cut -d' ' -f2)
 
 	if [ -n "$save" ]; then
 		action="save"
@@ -439,7 +434,7 @@ do_mimetype_action() {
 	url=$(lbry_get_url "$action" "$3")
 
 
-	program=$(echo "$1" | cut -d' ' -f3- | sed "s|\$1|$url|g; s|\$mimetype|$2|")
+	program=$(printf '%s' "$1" | cut -d' ' -f3- | sed "s|\$1|$url|g; s|\$mimetype|$2|")
 	if [ -z "$program" ]; then
 		if [ "$mimetype_action" = "save" ]; then
 			print_info "File saved to $url"
@@ -448,7 +443,6 @@ do_mimetype_action() {
 		fi
 	else
 		print_info "$program"
-		#echo "$program" | $SHELL
 		( eval "$program" )
 	fi
 }
@@ -457,7 +451,7 @@ handle_lbry_url() {
 	# Ignore comments in config file and normalize whitespaces
 	sed '/^ *#/d; s/#.*//; s/\s\+/ /g' < "$1" \
 		| while read -r line; do
-			mimetype_pattern="$(echo "$line" | cut -d' ' -f1)"
+			mimetype_pattern="$(printf '%s' "$line" | cut -d' ' -f1)"
 			case "$2" in
 				$mimetype_pattern) 
 					do_mimetype_action "$line" "$2" "$3"
@@ -487,7 +481,6 @@ open() {
 	longopts=get-mime,help,save-file,force-stream,quiet
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
-#	echo "$@"
 
 	while true; do
 		case "$1" in
@@ -612,7 +605,6 @@ get() {
 	longopts=resolve,help,file,stream,terminal,output:,force-save,quiet
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
-#	echo "$@"
 	
 	while true; do
 		case "$1" in
@@ -950,7 +942,7 @@ lbrynet_list_files() {
 
 		# Filter LBRY data using jq, output properties line by line
 		# Process them and combine them into one line
-		echo "$list_info" | jq ".result.items|.[]|{$columns}" | sed 's/,$//' | while read -r line; do
+		printf '%s' "$list_info" | jq ".result.items|.[]|{$columns}" | sed 's/,$//' | while read -r line; do
 			case "$line" in
 				\{ )
 					continue
@@ -1098,7 +1090,7 @@ lbrynet_list_files() {
 					if [ -n "$ls_not_files" ]; then
 						printf '""DELETE THIS""'
 					elif [ -n "$ls_relative_path" ]; then
-						filename="$(echo "$line" | cut -d' ' -f2-)"
+						filename="$(printf '%s' "$line" | cut -d' ' -f2-)"
 						filename="$(trim_quotes "$filename")"
 						printf '%s' "$(realpath --relative-base="$PWD" "$filename")"
 					elif [ -n "$ls_path" ]; then
@@ -1120,7 +1112,6 @@ lbt_ls() {
 	longopts=help,no-path,absolute-path,channel,files,not-files,no-name,blobs,mime-type,full,empty,not-empty,color::,relative-path,table::,no-size,human-readable::,sort:,reverse,pretty::,no-time,claim-id,full-time,unix-time
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
-#	echo "$@"
 
 	while true; do
 		case "$1" in
@@ -1425,7 +1416,7 @@ lbt_rm_single() {
 				lbrynet_check_error "$result"
 				;;
 		esac
-		if echo "$result" | grep -q '"download_path": null'; then
+		if printf '%s' "$result" | grep -q '"download_path": null'; then
 			case "$1" in
 				\#* )
 					print_error "$1: not saved as file"
@@ -1436,7 +1427,7 @@ lbt_rm_single() {
 			esac
 			exit 1
 		fi
-		rm "$(echo "$result" | jq --raw-output '.download_path')"
+		rm "$(printf '%s' "$result" | jq --raw-output '.download_path')"
 		return
 	fi
 
@@ -1473,7 +1464,6 @@ lbt_rm() {
 	longopts=help,file,no-blobs
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
-#	echo "$@"
 
 	while true; do
 		case "$1" in
@@ -1536,7 +1526,6 @@ feed() {
 	longopts=help,sfeed,start-page:,pages:,color::,plain,time
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
-#	echo "$@"
 
 	while true; do
 		case "$1" in
@@ -1688,7 +1677,7 @@ feed() {
 	page="${feed_start_page:-1}"
 
 	# Output JSON data to jq command
-	while [ "$page" -lt $(("$feed_start_page" + "$feed_pages")) ]; do
+	while [ "$page" -lt $((feed_start_page + feed_pages)) ]; do
 		claim_info="$(curl --silent -d"{\
 			\"method\": \"claim_search\",\
 			\"params\": {\
@@ -1699,7 +1688,7 @@ feed() {
 				\"order_by\": \"release_time\"\
 			}}" "$api_server")"
 		lbrynet_check_error "$claim_info"
-		echo "$claim_info" | jq --raw-output "$jq_command"
+		printf '%s' "$claim_info" | jq --raw-output "$jq_command"
 		page=$(("$page" + 1))
 	done | if [ -z "$feed_sfeed" ]; then
 		awk 'BEGIN { FS="\t"; OFS="\t" };
