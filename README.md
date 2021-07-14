@@ -98,7 +98,7 @@ Just for fun, you can also output data in a format compatible with [sfeed](https
 
 ![lbt + sfeed_curses](lbt-sfeed.png "lbt + sfeed curses")
 
-Alternatively, a simple dmenu/bemenu script:
+Alternatively, a simple dmenu/[bemenu](https://github.com/Cloudef/bemenu) script:
 
 `lbt open "$(lbt feed | bemenu --list=10 | sed 's|^.*lbry://||')"`
 
@@ -127,6 +127,10 @@ will delete [this](https://open.lbry.com/@davidpakman:7/how-the-internet-destroy
 `lbt rm "https://lbry.tv/@lbry:3f/fullscreenrelease:7" --no-blobs -f`
 
 will delete the video from your downloads folder, but not from your LBRY library.
+
+### contrib/
+
+The `contrib/` folder includes some nice things, like an [fzf](https://github.com/junegunn/fzf) script for looking at subscribed channels. That code is provided by the community and is not ""officially"" a part of `lbt`, but could still be very useful to some people.
 
 ## Installation
 

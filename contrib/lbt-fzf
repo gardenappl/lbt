@@ -1,0 +1,87 @@
+#! /bin/bash
+
+set -e
+
+OPTIONS=h
+LONGOPTS=help
+
+PARSED="$(getopt --options=$OPTIONS --longoptions=$LONGOPTS --name "$0" -- "$@")"
+eval set -- "$PARSED"
+
+usage() {
+  echo -e "Usage: $0 <COMMAND>\n  Commands:\n    f|feed\n    c|channels"
+  exit $1
+}
+
+while true; do
+  case "$1" in
+    -h|--help)
+      usage 0
+      ;;
+    --)
+      shift
+      break
+      ;;
+    *)
+      echo "An unexpected error occurred parsing arguments"
+      exit 3
+      ;;
+  esac
+done
+
+cmd="${1:-feed}"
+shift || true
+
+get_feed_selection() {
+  channel="$1"
+  page="${2:-1}"
+  raw_selection="$(lbt feed $channel --start-page $page |
+    fzf --query="$3" \
+        --with-nth='..-2' \
+        --header="Page $page (CTRL+N to go to next page, CTRL+P to go to previous page)" \
+        --expect='ctrl-n,ctrl-p,esc')"
+  pressed_key="$(head -1 <<< "$raw_selection")"
+  selection="$(sed 1d <<< "$raw_selection")"
+
+  case "$pressed_key" in
+    ctrl-n)
+      get_feed_selection "$channel" $((page+1))
+      ;;
+    ctrl-p)
+      prev_page="$((page-1))"
+      [[ $prev_page -lt 1 ]] && prev_page=1
+      get_feed_selection "$channel" $prev_page
+      ;;
+    esc)
+      exit 1
+      ;;
+    *)
+      awk '{print $(NF)}' <<< "$selection"
+      ;;
+  esac
+}
+
+select_from_feed() {
+  channel="$1"
+  shift || true
+
+  selection="$(get_feed_selection "$channel" 1 "$@")"
+  if [ -n "$selection" ] ; then
+    lbt open "$selection" & disown
+  else
+    exit 1
+  fi
+}
+
+case "$cmd" in
+  f|feed)
+    select_from_feed "" 1 "$@"
+    ;;
+  c|channels)
+    channel_selection="$(cat "${XDG_CONFIG_HOME:-$HOME/.config}/lbt/feeds" | fzf --query="$@" --select-1)"
+    select_from_feed "$channel_selection" 1
+    ;;
+  *)
+   usage 2
+    ;;
+esac
