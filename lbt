@@ -3,11 +3,8 @@
 set -o errexit
 
 
-lbrynet_local=y
 config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
-
 api_lbry_com="https://api.lbry.com"
-
 VERSION='1.1.3'
 
 
@@ -20,22 +17,28 @@ if [ ! -f "$config_dir/mimetypes" ]; then
 
 # First column is a glob pattern for matching MIME types.
 # Second column is the action: "save" means that the file must be downloaded before opening, "stream" means that the program can open the file as an HTTP stream.
-# Third column is the program to launch. $1 is the stream URL/path to file, $mimetype is the MIME type. Can be left empty if the second column says "save"
+# Anything after the second column is ignored.
 
-#Uncomment this if you want to open files using XDG default applications:
-#video/*	stream	gtk-launch $(xdg-mime query default $mimetype) "$1"
-#audio/*	stream	gtk-launch $(xdg-mime query default $mimetype) "$1"
-#text/html	stream	gtk-launch $(xdg-mime query default $mimetype) "$1"
-#*		save	gtk-launch $(xdg-mime query default $mimetype) "$1"
-
-video/*		stream	mpv "$1"
-audio/*		stream	mpv "$1"
-image/*		save	imv "$1"
-text/html	stream	$BROWSER "$1"
-application/pdf	save	zathura "$1"
+video/*		stream
+audio/*		stream
+image/*		save
+text/html	stream
+application/pdf	save
 *		save' \
 	> "$config_dir/mimetypes"
 fi
+
+if [ ! -f "$config_dir/config.json" ]; then
+	echo \
+'{
+	"use_xdg_open": true,
+	"custom_open_command": "run-mailcap --action=view \"$mimetype:$1\"",
+	"use_local_lbrynet": true,
+	"remote_lbrynet_url_http": "localhost:5279"
+}' \
+	> "$config_dir/config.json"
+fi
+
 
 
 lbt_help_open() {
@@ -214,13 +217,31 @@ lbrynet_start_if_needed() {
 	fi
 }
 
-get_local_lbrynet_config() {
-	lbrynet_config=$(lbrynet settings get)
-	lbrynet_check_error "$lbrynet_config"
-#	streaming_server=$(json_value "$lbrynet_config" "streaming_server")
-	api_server=$(json_value "$lbrynet_config" "api")
-#	download_dir=$(json_value "$lbrynet_config" "download_dir")
+
+lbt_config_string() {
+	printf '%s' "$lbt_config" | jq ".$1" --raw-output
 }
+
+lbt_config_bool() {
+	printf '%s' "$lbt_config" | jq ".$1" --exit-status > /dev/null
+}
+
+init_lbt_config() {
+	lbt_config=$(cat "$config_dir/config.json")
+
+	if lbt_config_bool 'use_local_lbrynet'; then
+		lbrynet_local=y
+
+		lbrynet_start_if_needed
+
+		lbrynet_config=$(lbrynet settings get)
+		lbrynet_check_error "$lbrynet_config"
+		api_server=$(json_value "$lbrynet_config" "api")
+	else
+		api_server=$(lbt_config_string 'remote_lbrynet_url_http')
+	fi
+}
+
 
 lbrynet_version() {
 	curl --silent -d"{\"method\": \"version\"}" "$api_server"
@@ -430,16 +451,15 @@ do_mimetype_action() {
 	url=$(lbry_get_url "$action" "$3")
 
 
-	program=$(printf '%s' "$1" | cut -d' ' -f3- | sed "s|\$1|$url|g; s|\$mimetype|$2|")
-	if [ -z "$program" ]; then
-		if [ "$mimetype_action" = "save" ]; then
-			print_info "File saved to $url"
-		else
-			print_error 'Error: MIME type action is set to "stream" yet program is empty'
-		fi
+	if lbt_config_bool 'use_xdg_open'; then
+		print_info "Type: $2"
+		application="$(xdg-mime query default "$2")"
+		print_info "Application: $application"
+		( gtk-launch "$application" "$url" )
 	else
-		print_info "$program"
-		( eval "$program" )
+		command=$(lbt_config_string 'custom_open_command' | sed "s|\$1|$url|g; s|\$mimetype|$2|g")
+		print_info "Command: $command"
+		( eval "$command" )
 	fi
 }
 
@@ -540,9 +560,7 @@ open() {
 	esac
 
 
-	lbrynet_start_if_needed
-
-	get_local_lbrynet_config
+	init_lbt_config
 
 	if [ -n "$is_claim_id" ]; then
 		claim_info="$(lbrynet_search_claim_id "$1")"
@@ -706,6 +724,10 @@ get() {
 		done
 	fi
 
+
+	init_lbt_config
+
+
 	case "$1" in
 		\#* )
 			is_claim_id=y
@@ -719,9 +741,7 @@ get() {
 	esac
 
 
-	lbrynet_start_if_needed
 
-	get_local_lbrynet_config
 
 	if [ -n "$is_claim_id" ]; then
 		claim_info="$(lbrynet_search_claim_id "$1")"
@@ -1385,8 +1405,7 @@ lbt_ls() {
 	fi
 
 
-	lbrynet_start_if_needed
-	get_local_lbrynet_config
+	init_lbt_config
 
 
 	lbrynet_list_files
@@ -1505,9 +1524,8 @@ lbt_rm() {
 		exit 1
 	fi
 
-	lbrynet_start_if_needed
 
-	get_local_lbrynet_config
+	init_lbt_config
 
 	while [ -n "$1" ]; do
 		lbt_rm_single "$1"
@@ -1586,9 +1604,7 @@ feed() {
 
 	
 
-	lbrynet_start_if_needed
-
-	get_local_lbrynet_config
+	init_lbt_config
 
 	check_incompatible "$feed_sfeed" "$feed_sfeed_plain" "--sfeed" "--plain"
 	if [ -n "$feed_sfeed_plain" ]; then
@@ -1771,8 +1787,7 @@ lbt_version() {
 	fi
 	echo "LBRY daemon info:"
 
-	lbrynet_start_if_needed
-	get_local_lbrynet_config
+	init_lbt_config
 	lbrynet_version | jq '.result'
 }
 

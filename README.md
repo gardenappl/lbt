@@ -25,34 +25,36 @@ lbt can also convert **some YouTube video links** to LBRY videos automatically, 
 
 **lbt open** uses its own configuration file to determine how to open LBRY URLs: which program to use, whether or not the program supports streaming, etc. By default, it uses more minimalist software for specific file formats (video, audio, etc) or just saves them into your downloads folder if it doesn't recognise the file type.
 
-**Example of usage (with the default configuration):**
+**Example of usage**
 
 `lbt open "lbry://@BrodieRobertson#5/easy-motion-how-did-i-use-vim-until-now#9"`
 
-opens [this video](https://open.lbry.com/@BrodieRobertson:5/easy-motion-how-did-i-use-vim-until-now:9) in MPV, as a stream.
+opens [this video](https://open.lbry.com/@BrodieRobertson:5/easy-motion-how-did-i-use-vim-until-now:9), as a stream.
 
 `lbt open "https://open.lbry.com/@AlexandreMarcotte777:0/brodie-robertson:1"`
 
-downloads [this GIF](https://open.lbry.com/@AlexandreMarcotte777:0/brodie-robertson:1) and opens it using [imv](https://github.com/eXeC64/imv).
+downloads [this GIF](https://open.lbry.com/@AlexandreMarcotte777:0/brodie-robertson:1) and opens it in your preferred image viewer.
 
-This behaviour can be changed using a simple config file, namely `~/.config/lbt/mimetypes`. It is based on the file's [MIME type](https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types).
+This behaviour can be changed using simple config files, namely `~/.config/lbt/config.json` and `~/.config/lbt/mimetypes`. The latter is based on the file's [MIME type](https://developer.mozilla.org/en-US/docs/Web/HTTP/Basics_of_HTTP/MIME_types):
 
 ```
-#Uncomment this if you want to open files using XDG default applications:
-#video/*	stream	gtk-launch $(xdg-mime query default $mimetype) "$1"
-#audio/*	stream	gtk-launch $(xdg-mime query default $mimetype) "$1"
-#text/html	stream	gtk-launch $(xdg-mime query default $mimetype) "$1"
-#*		save	gtk-launch $(xdg-mime query default $mimetype) "$1"
-
-video/*		stream	mpv "$1"
-audio/*		stream	mpv "$1"
-image/*		save	imv "$1"
-text/html	stream	$BROWSER "$1"
-application/pdf	save	zathura "$1"
-*		save 		# empty third column means "save to downloads directory"
+video/*		stream
+audio/*		stream
+image/*		save 
+text/html	stream
+application/pdf	save 
+*		save 
 ```
 
-The config file is automatically generated on the first run. The simplest way to find out the MIME type is with the program's `--get-mime` parameter, for example:
+`config.json` can be used to change the run command, such as:
+```json
+{
+	"use_xdg_open": false,
+	"custom_open_command": "run-mailcap --action=view \"$mimetype:$1\""
+}
+```
+
+The config files are automatically generated on the first run. The simplest way to find out the MIME type is with the program's `--get-mime` parameter, for example:
 
 ```
 > lbt open -m "https://lbry.tv/@grin:4/keep-it-simple:4"
@@ -163,5 +165,4 @@ If you want to use `lbt open` as the default handler for lbry:// links:
 Unimplemented features:
 
 1. Interacting with paid content.
-2. Working with remote `lbrynet` daemons.
-3. Localization.
+2. Localization.
