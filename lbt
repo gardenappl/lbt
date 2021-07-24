@@ -5,7 +5,7 @@ set -o errexit
 
 config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
 api_lbry_com="https://api.lbry.com"
-VERSION='2.0.0'
+VERSION='2.0.1'
 
 
 mkdir -p "$config_dir"
@@ -1424,28 +1424,30 @@ lbt_rm_single() {
 			\#* )
 				claim_id="${1#\#}"
 				result="$(lbrynet_search_claim_id_local "$claim_id")"
+				url="$(printf '%s' "$result" | jq '[.claim_name, .claim_id] | join(":")' --raw-output)"
 				;;
 			* )
 				url="$(normalize_lbry_url "$1")"
-				if [ "$url" != "$1" ]; then
-					print_info "Deleting $url..."
-				fi
 				result="$(lbrynet_get "$url" | jq '.result')"
 				lbrynet_check_error "$result"
 				;;
 		esac
+		printf_info '\033[38;5;6m%s\033[m - deleting file... ' "$url"
 		if printf '%s' "$result" | grep -q '"download_path": null'; then
 			case "$1" in
 				\#* )
-					print_error "$1: not saved as file"
+					print_error "Not saved as file"
 					;;
 				* )
-					print_error "$1: not saved as file (try searching via claim ID?)"
+					print_error "Not saved as file (try searching via claim ID?)"
 					;;
 			esac
 			exit 1
 		fi
-		rm "$(printf '%s' "$result" | jq --raw-output '.download_path')"
+		path=$(printf '%s' "$result" | jq --raw-output '.download_path')
+		path=$(realpath --relative-base "$PWD" "$path")
+		rm -- "$path"
+		print_info "Deleted '$path'"
 		return
 	fi
 
@@ -1460,20 +1462,26 @@ lbt_rm_single() {
 	case "$1" in
 		\#* )
 			claim_id="${1#\#}"
+			result="$(lbrynet_search_claim_id_local "$claim_id")"
+			url="$(printf '%s' "$result" | jq '[.claim_name, .claim_id] | join(":")' --raw-output)"
 			;;
 		* )
 			url="$(normalize_lbry_url "$1")"
-			if [ "$url" != "$1" ]; then
-				print_info "Deleting $url..."
-			fi
 			claim_id="$(lbrynet_get_claim_id "$url")"
 			;;
 	esac
+	if [ -n "$rm_file" ]; then
+		printf_info '\033[38;5;6m%s\033[m - deleting blobs and file... ' "$url"
+	else
+		printf_info '\033[38;5;6m%s\033[m - deleting blobs... ' "$url"
+	fi
 	curl_data="$curl_data, \"claim_id\": \"$claim_id\"}}"
 
 	if curl --silent -d"$curl_data" "$api_server" | grep -q '"result": false'; then
-		print_error "Failed to delete $1"
+		print_error "Failed."
 		exit 1
+	else
+		print_info "Done."
 	fi
 }
 
