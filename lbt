@@ -314,17 +314,20 @@ print_error() {
 
 printf_info() {
 	if [ -z "$quiet" ]; then
+		# shellcheck disable=SC2059
 		>&2 printf "$@"
 	fi
 }
 
 
+# shellcheck disable=SC1091
 . gettext.sh
 
 TEXTDOMAIN=lbt
 export TEXTDOMAIN
 
 check_incompatible() {
+	# shellcheck disable=SC2034,SC2016
 	if [ -n "$1" ] && [ -n "$2" ]; then
 		opt1="$3"
 		opt2="$4"
@@ -471,6 +474,8 @@ handle_lbry_url() {
 	sed '/^ *#/d; s/#.*//; s/\s\+/ /g' < "$1" \
 		| while read -r line; do
 			mimetype_pattern="$(printf '%s' "$line" | cut -d' ' -f1)"
+
+			# shellcheck disable=SC2254
 			case "$2" in
 				$mimetype_pattern) 
 					do_mimetype_action "$line" "$2" "$3"
