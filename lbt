@@ -16,7 +16,9 @@ if [ ! -f "$config_dir/mimetypes" ]; then
 # Rules are ordered by priority, the ones at the top have the highest priority.
 
 # First column is a glob pattern for matching MIME types.
-# Second column is the action: "save" means that the file must be downloaded before opening, "stream" means that the program can open the file as an HTTP stream.
+# Second column is the action:
+#    "save" means that the file must be downloaded before opening.
+#    "stream" means that the program can open the file as an HTTP stream.
 # Anything after the second column is ignored.
 
 video/*		stream
