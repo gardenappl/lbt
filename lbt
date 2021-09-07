@@ -34,7 +34,7 @@ if [ ! -f "$config_dir/config.json" ]; then
 	cat << EOF > "$config_dir/config.json"
 {
 	"use_xdg_open": true,
-	"custom_open_command": "run-mailcap --action=view \"$mimetype:$1\"",
+	"custom_open_command": "run-mailcap --action=view \"\$mimetype:\$1\"",
 	"use_local_lbrynet": true,
 	"remote_lbrynet_url_http": "localhost:5279"
 }
@@ -471,7 +471,7 @@ do_mimetype_action() {
 
 handle_lbry_url() {
 	# Ignore comments in config file and normalize whitespaces
-	sed '/^ *#/d; s/#.*//; s/\s\+/ /g' < "$1" \
+	sed 's/\s\+/ /g; /^ *#/d; s/#.*//' < "$1" \
 		| while read -r line; do
 			mimetype_pattern="$(printf '%s' "$line" | cut -d' ' -f1)"
 
