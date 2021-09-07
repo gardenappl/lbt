@@ -31,7 +31,7 @@ fi
 
 
 if [ ! -f "$config_dir/config.json" ]; then
-	car << EOF > "$config_dir/config.json"
+	cat << EOF > "$config_dir/config.json"
 {
 	"use_xdg_open": true,
 	"custom_open_command": "run-mailcap --action=view \"$mimetype:$1\"",
