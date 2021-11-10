@@ -179,8 +179,8 @@ lbrynet_check_error() {
 			#If starts with {. assume valid JSON
 			case "$1" in
 				*'"error": '* )
-					print_error "Error in LBRY daemon."
-					print_error "$1"
+					print_error "Error in LBRY daemon: $(json_value "$1" 'error.name')"
+					print_error "$(json_value "$1" 'error.text')"
 					exit 1
 					;;
 			esac
