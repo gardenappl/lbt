@@ -5,7 +5,7 @@ set -o errexit
 
 config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
 api_lbry_com="https://api.lbry.com"
-VERSION='2.0.1'
+VERSION='2.0.2'
 
 
 mkdir -p "$config_dir"
