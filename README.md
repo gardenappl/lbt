@@ -2,10 +2,10 @@
 
 **lbt** is a collection of command-line tools for interacting with the LBRY network, written in POSIX shell.
 
-Currently, there are four tools available:
+Currently, these tools are available:
 
 * **lbt open** will open LBRY content in the user's preferred application. (think *xdg-open but for LBRY*)
-* **lbt feed** is a very simple way to see the latest content from LBRY channels. (think [sfeed](https://codemadness.org/sfeed-simple-feed-parser.html) *but for LBRY*)
+* **lbt feed** is a very basic way to see the latest content from LBRY channels. (think [sfeed](https://codemadness.org/sfeed-simple-feed-parser.html) *but for LBRY*)
 * **lbt ls** will list all LBRY content that's saved on this system.
 * **lbt get** will simply fetch LBRY content and output it, either into a file or into standard output. (think *wget but for LBRY*)
 * **lbt rm** will delete saved LBRY content.
@@ -21,11 +21,13 @@ lbt can also convert **some YouTube video links** to LBRY videos automatically, 
 * You don't want to use the official Electron app or the lbry.tv web interface (which some might call "bloated").
 * You want to work with LBRY content in your own shell scripts but don't want to mess with JSON output.
 
+## Commands
+
 ### lbt open
 
-**lbt open** uses its own configuration file to determine how to open LBRY URLs: which program to use, whether or not the program supports streaming, etc. By default, it uses more minimalist software for specific file formats (video, audio, etc) or just saves them into your downloads folder if it doesn't recognise the file type.
+**lbt open** will let you view LBRY content in your preferred application. It uses its own configuration file to determine how to open files: either fully download the file before opening it, or, if the application supports it, open a HTTP stream (useful for watching videos).
 
-**Example of usage**
+#### Example of usage
 
 `lbt open "lbry://@BrodieRobertson#5/easy-motion-how-did-i-use-vim-until-now#9"`
 
@@ -54,6 +56,8 @@ application/pdf	save
 }
 ```
 
+(I recommend [https://github.com/cglindkamp/run-mailcap-rs](run-mailcap-rs), as the original Ubuntu version of `run-mailcap` doesn't work right with http:// links)
+
 The config files are automatically generated on the first run. The simplest way to find out the MIME type is with the program's `--get-mime` parameter, for example:
 
 ```
@@ -66,7 +70,7 @@ MIME type is text/markdown
 
 **lbt get** is a lower-level utility: instead of opening content with an appropriate program, it simply grabs the needed file from the network and pipes it out. It can also just print out a URL that other programs can use.
 
-**Examples:**
+#### Examples:
 
 `lbt get "https://lbry.tv/@lbry:3f/julian-chandra-joins-lbry:8" | less`
 
@@ -84,7 +88,7 @@ downloads the video into your local download directory, and prints out the file 
 
 Output the latest content from LBRY channels.
 
-**Examples:**
+#### Examples:
 
 `lbt feed 'https://odysee.com/@ashesashescast:f'`
 
@@ -94,7 +98,7 @@ prints this:
 
 It can also read channel names or URLs from a configuration file (`~/.config/lbt/feeds`).
 
-Just for fun, you can also output data in a format compatible with [sfeed](https://codemadness.org/sfeed-simple-feed-parser.html) or sfeed_plain. This allows you to do cool things, like:
+Just for fun, you can also output data in a format compatible with [sfeed](https://codemadness.org/sfeed-simple-feed-parser.html) or `sfeed_plain`. This allows you to do cool things, like:
 
 `lbt feed @BrodieRobertson @DistroTube --sfeed | sfeed_curses`
 
@@ -108,7 +112,7 @@ Alternatively, a simple dmenu/[bemenu](https://github.com/Cloudef/bemenu) script
 
 Lists all LBRY content which is saved on your system. Accepts lots of options for showing/hiding columns of information, sorting, filtering, etc.
 
-**Examples:**
+#### Examples:
 
 `lbt ls --files`
 
@@ -120,7 +124,7 @@ prints out additional columns for the channel name and MIME type, and sorts file
 
 ### lbt rm
 
-**Examples:**
+#### Examples:
 
 `lbt rm "#aec4347ca0eaefea5eb92d4a51b25451d0581996" --file`
 
@@ -164,5 +168,7 @@ If you want to use `lbt open` as the default handler for lbry:// links:
 
 Unimplemented features:
 
-1. Interacting with paid content.
-2. Localization.
+1. Interacting with paid content (I'm too scared to touch the crypto wallet stuff)
+2. Localization
+3. `man` page
+4. Shell completion
