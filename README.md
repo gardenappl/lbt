@@ -172,3 +172,6 @@ Unimplemented features:
 2. Localization
 3. `man` page
 4. Shell completion
+5. Publishing content, I will not do this because:
+  * `lbrynet publish` does a decent job
+  * [https://gitlab.com/gardenappl/lbry-sync-ytdl](lbry-sync-ytdl) is another CLI tool by me which can publish an entire playlist of video/audio from youtube-dl
