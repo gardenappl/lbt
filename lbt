@@ -8,6 +8,17 @@ api_lbry_com="https://api.lbry.com"
 VERSION='2.0.2'
 
 
+format_bold='\033[1m'
+format_reset='\033[m'
+format_red='\033[38;5;1m'
+format_green='\033[38;5;2m'
+format_yellow='\033[38;5;3m'
+format_blue='\033[38;5;4m'
+format_magenta='\033[38;5;5m'
+format_cyan='\033[38;5;6m'
+format_black_bright='\033[38;5;8m'
+
+
 mkdir -p "$config_dir"
 
 if [ ! -f "$config_dir/mimetypes" ]; then
@@ -803,42 +814,52 @@ lbrynet_list_files() {
 	# --files or --not-files claims
 	columns="p: .download_path"
 	total_columns=1
+	if [ -n "$ls_claim_id" ]; then
+		columns="i: .claim_id, $columns"
+		claim_id_column=1
+		total_columns=$((total_columns + 1))
+	fi
+	if [ -n "$ls_mime_type" ]; then
+		columns="m: .mime_type, $columns"
+		mime_column=1
+		claim_id_column=$((claim_id_column + 1))
+		total_columns=$((total_columns + 1))
+	fi
 	if [ -z "$ls_no_name" ]; then
 		columns="n: .claim_name, $columns"
+		mime_column=$((mime_column + 1))
+		claim_id_column=$((claim_id_column + 1))
 		total_columns=$((total_columns + 1))
 	fi
 	if [ -z "$ls_no_time" ]; then
 		columns="a: .added_on, $columns"
 		time_column=1
+		mime_column=$((mime_column + 1))
+		claim_id_column=$((claim_id_column + 1))
 		total_columns=$((total_columns + 1))
 	fi
 	if [ -z "$ls_no_size" ]; then
 		columns="s: .total_bytes, $columns"
 		size_column=1
 		time_column=$((time_column + 1))
+		mime_column=$((mime_column + 1))
+		claim_id_column=$((claim_id_column + 1))
 		total_columns=$((total_columns + 1))
 	fi
 	if [ -n "$ls_channel" ]; then
 		columns="c: .channel_name, $columns"
 		size_column=$((size_column + 1))
 		time_column=$((time_column + 1))
-		total_columns=$((total_columns + 1))
-	fi
-	if [ -n "$ls_mime_type" ]; then
-		columns="$columns, m: .mime_type"
-		mime_column=$((total_columns + 1))
+		mime_column=$((mime_column + 1))
+		claim_id_column=$((claim_id_column + 1))
 		total_columns=$((total_columns + 1))
 	fi
 	if [ -n "$ls_blobs" ]; then
 		columns="b: .blobs_completed, t: .blobs_in_stream, $columns"
-		mime_column=$((mime_column + 1))
 		size_column=$((size_column + 1))
 		time_column=$((time_column + 1))
-		total_columns=$((total_columns + 1))
-	fi
-	if [ -n "$ls_claim_id" ]; then
-		columns="$columns, i: .claim_id"
-		claim_id_column=$((total_columns + 1))
+		mime_column=$((mime_column + 1))
+		claim_id_column=$((claim_id_column + 1))
 		total_columns=$((total_columns + 1))
 	fi
 
@@ -986,18 +1007,16 @@ lbrynet_list_files() {
 				#claim ID
 				\"i\"* )
 					if [ "$ls_color" = y ]; then
-						printf '\033[38;5;8m%s' "$line"
-					else
-						printf '%s' "$line"
+						printf "$format_black_bright"
 					fi
+					printf '%s' "$line"
 					;;
 				#added on datetime
 				\"a\"* )
 					if [ "$ls_color" = y ]; then
-						printf '\033[38;5;4m%s' "$line"
-					else
-						printf '%s' "$line"
+						printf "$format_blue"
 					fi
+					printf '%s' "$line"
 					;;
 				#blobs completed (for filtering, coloring etc)
 				"\"e\": 0" )
@@ -1035,18 +1054,18 @@ lbrynet_list_files() {
 						# in the correct order
 						printf '3'
 						if [ "$ls_color" = y ]; then
-							printf '\033[38;5;2m'
+							printf "$format_green"
 						fi
 					elif [ -n "$is_empty" ]; then
 						printf '1'
 						if [ "$ls_color" = y ]; then
-							printf '\033[38;5;1m'
+							printf "$format_red"
 						fi
 						printf '!'
 					else
 						printf '2'
 						if [ "$ls_color" = y ]; then
-							printf '\033[38;5;3m'
+							printf "$format_yellow"
 						fi
 						printf '<'
 					fi
@@ -1058,10 +1077,9 @@ lbrynet_list_files() {
 				#MIME type
 				\"m\"* )
 					if [ "$ls_color" = y ]; then
-						printf '\033[38;5;5m%s' "$line"
-					else
-						printf '%s' "$line"
+						printf "$format_magenta"
 					fi
+					printf '%s' "$line"
 					;;
 				#blobs completed
 				\"b\"* )
@@ -1072,11 +1090,11 @@ lbrynet_list_files() {
 				\"t\"* )
 					if [ "$ls_color" = y ]; then
 						if [ -n "$is_full" ]; then
-							printf '\033[38;5;2m'
+							printf "$format_green"
 						elif [ -n "$is_empty" ]; then
-							printf '\033[38;5;1m'
+							printf "$format_red"
 						else
-							printf '\033[38;5;3m'
+							printf "$format_yellow"
 						fi
 					fi
 
@@ -1087,7 +1105,7 @@ lbrynet_list_files() {
 					;;
 				\"c\"* )
 					if [ "$ls_color" = y ]; then
-						printf '\033[38;5;6m\033[1m%s\033[m' "$line"
+						printf "${format_cyan}${format_bold}%s${format_reset}" "$line"
 					else
 						printf '%s' "$line"
 					fi
@@ -1096,13 +1114,13 @@ lbrynet_list_files() {
 				\"n\"* )
 					if [ "$ls_color" = y ]; then
 						if [ -n "$is_full" ]; then
-							printf '\033[38;5;2m'
+							printf "$format_green"
 						elif [ -n "$is_empty" ]; then
-							printf '\033[38;5;1m'
+							printf "$format_red"
 						else
-							printf '\033[38;5;3m'
+							printf "$format_yellow"
 						fi
-						printf '\033[1m%s\033[m' "$line"
+						printf "${format_bold}%s${format_reset}" "$line"
 					else
 						printf '%s' "$line"
 					fi
@@ -1115,7 +1133,7 @@ lbrynet_list_files() {
 					;;
 				\"p\"* )
 					if [ "$ls_color" = y ]; then
-						printf '\033[m'
+						printf "$format_reset"
 					fi
 					if [ -n "$ls_not_files" ]; then
 						printf '""DELETE THIS""'
@@ -1443,7 +1461,7 @@ lbt_rm_single() {
 				lbrynet_check_error "$result"
 				;;
 		esac
-		printf_info '\033[38;5;6m%s\033[m - deleting file... ' "$url"
+		printf_info '%s%s%s - deleting file... ' "$format_cyan" "$url" "$format_reset"
 		if printf '%s' "$result" | grep -q '"download_path": null'; then
 			case "$1" in
 				\#* )
@@ -1482,9 +1500,9 @@ lbt_rm_single() {
 			;;
 	esac
 	if [ -n "$rm_file" ]; then
-		printf_info '\033[38;5;6m%s\033[m - deleting blobs and file... ' "$url"
+		printf_info '%s%s%s - deleting blobs and file... ' "$format_cyan" "$url" "$format_reset"
 	else
-		printf_info '\033[38;5;6m%s\033[m - deleting blobs... ' "$url"
+		printf_info '%s%s%s - deleting blobs... ' "$format_cyan" "$url" "$format_reset"
 	fi
 	curl_data="$curl_data, \"claim_id\": \"$claim_id\"}}"
 
@@ -1803,7 +1821,7 @@ lbt_help_generic() {
 
 lbt_version() {
 	if [ -t 1 ]; then
-		printf '\033[1m%s\033[m\n' "lbt $VERSION"
+		printf '%s%s%s\n' "$format_bold" "lbt $VERSION" "$format_reset"
 	else
 		echo "lbt $VERSION"
 	fi
