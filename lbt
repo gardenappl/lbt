@@ -379,6 +379,10 @@ normalize_lbry_url() {
 		https://odysee.com/* | http://odysee.com/* )
 			sed_command="$sed_command; s|.*odysee\.com/||"
 			;;
+		https://* | http://* )
+			print_error "Not a known LBRY website: $1"
+			exit 1
+			;;
 		*)
 			sed_command="$sed_command; s|lbry://||"
 			;;
