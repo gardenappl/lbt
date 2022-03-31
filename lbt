@@ -5,7 +5,7 @@ set -o errexit
 
 config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
 api_lbry_com="https://api.lbry.com"
-VERSION='2.1.1'
+VERSION='2.1.2'
 
 
 format_bold='\033[1m'
@@ -132,9 +132,11 @@ lbt_help_rm() {
 "Usage: lbt rm URLs... [options...]
    or  lbt rm #CLAIM_IDs... [optons...]
 
-	-f, --file 	If content was saved as a file in the downloads directory, delete it
-	-h, --help 	Print help
-	-n, --no-blobs 	Don't remove stored blobs (requires --file)"
+	-c, --color WHEN 	Output information with color (always,auto,never)
+	-f, --file 		If content was saved as a file in the downloads directory, delete it
+	-h, --help	 	Print help
+	-n, --no-blobs 		Don't remove stored blobs (requires --file)
+	-q, --quiet 		Don't output extra information, besides error messages"
 }
 
 
@@ -517,7 +519,7 @@ lbt_print_usage() {
 }
 
 
-open() {
+lbt_open() {
 	options=mhfsq
 	longopts=get-mime,help,save-file,force-stream,quiet
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
@@ -614,18 +616,12 @@ output_to_file() {
 	if [ "$lbrynet_local" = y ] && is_download_complete "$2"; then
 		download_path=$(result_value "$2" "download_path")
 		if [ -n "$force_save" ]; then
-			if [ -z "$quiet" ]; then
-				printf "Copying from %s... " "$download_path"
-			fi
+			printf_info "Copying from %s... " "$download_path"
 			cp "$download_path" "$1"
-			if [ -z "$quiet" ]; then
-				echo "Done."
-			fi
+			print_info "Done."
 		else
 			ln -s "$download_path" "$1"
-			if [ -z "$quiet" ]; then
-				echo "Created symlink from $1 to $download_path"
-			fi
+			printf_info "Created symlink from %s to %s" "$1" "$download_path"
 		fi
 		exit 0
 	fi
@@ -639,7 +635,7 @@ output_to_file() {
 }
 
 
-get() {
+lbt_get() {
 	options=rhfstO:o:Fq
 	longopts=resolve,help,file,stream,terminal,output:,force-save,quiet
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
@@ -1188,7 +1184,6 @@ lbt_ls() {
 						ls_pretty=y
 						;;
 					auto )
-						ls_pretty=auto
 						;;
 					never )
 						ls_pretty=n
@@ -1386,31 +1381,22 @@ lbt_ls() {
 	check_incompatible "$ls_full" "$ls_empty" "--full" "--empty"
 	check_incompatible "$ls_not_empty" "$ls_empty" "--not-empty" "--empty"
 
-	if [ -n "$ls_pretty" ]; then
-		if [ "$ls_pretty" = "auto" ]; then
-			if [ -t 1 ]; then
-				ls_pretty=y
-			else
-				ls_pretty=n
-			fi
-			unset ls_pretty
+
+	if [ -z "$ls_color" ] && [ -n "$NO_COLOR" ]; then
+		ls_color=n
+	fi
+
+	if [ -z "$ls_pretty" ]; then
+		if [ -t 1 ]; then
+			ls_pretty=y
 		else
-			ls_human="${ls_human:-$ls_pretty}"
-			ls_color="${ls_color:-$ls_pretty}"
-			ls_table="${ls_table:-$ls_pretty}"
+			ls_pretty=n
 		fi
 	fi
+	ls_human="${ls_human:-$ls_pretty}"
+	ls_color="${ls_color:-$ls_pretty}"
+	ls_table="${ls_table:-$ls_pretty}"
 
-
-	if [ -t 1 ]; then
-		ls_human="${ls_human:-y}"
-		ls_color="${ls_color:-y}"
-		ls_table="${ls_table:-y}"
-	else
-		ls_human="${ls_human:-n}"
-		ls_color="${ls_color:-n}"
-		ls_table="${ls_table:-n}"
-	fi
 
 	check_incompatible "$ls_files" "$ls_not_files" "--files" "--not-files"
 	check_incompatible "$ls_no_name" "$ls_no_path" "--no-name" "--no-path"
@@ -1461,7 +1447,11 @@ lbt_rm_single() {
 				lbrynet_check_error "$result"
 				;;
 		esac
-		printf_info '%s%s%s - deleting file... ' "$format_cyan" "$url" "$format_reset"
+		if [ -n "$rm_color" ]; then
+			printf_info "${format_cyan}%s${format_reset} - deleting file... " "$url"
+		else
+			printf_info '%s - deleting file... ' "$url"
+		fi
 		if printf '%s' "$result" | grep -q '"download_path": null'; then
 			case "$1" in
 				\#* )
@@ -1500,9 +1490,14 @@ lbt_rm_single() {
 			;;
 	esac
 	if [ -n "$rm_file" ]; then
-		printf_info '%s%s%s - deleting blobs and file... ' "$format_cyan" "$url" "$format_reset"
+		action_string='deleting blobs and file...'
 	else
-		printf_info '%s%s%s - deleting blobs... ' "$format_cyan" "$url" "$format_reset"
+		action_string='deleting blobs...'
+	fi
+	if [ -n "$rm_color" ]; then
+		printf_info "${format_cyan}%s${format_reset} - %s " "$url" "$action_string"
+	else
+		printf_info '%s - %s ' "$url" "$action_string"
 	fi
 	curl_data="$curl_data, \"claim_id\": \"$claim_id\"}}"
 
@@ -1515,8 +1510,8 @@ lbt_rm_single() {
 }
 
 lbt_rm() {
-	options=hfn
-	longopts=help,file,no-blobs
+	options=hfnc::q
+	longopts=help,file,no-blobs,color,quiet
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
 
@@ -1533,6 +1528,26 @@ lbt_rm() {
 			-n|--no-blobs )
 				rm_no_blobs=y
 				shift
+				;;
+			-q|--quiet)
+				quiet=y
+				shift
+				;;
+			-c|--color )
+				case "$2" in
+					"" )
+						rm_color=y
+						;;
+					always )
+						rm_color=y
+						;;
+					auto )
+						;;
+					never )
+						rm_color=n
+						;;
+				esac
+				shift 2
 				;;
 			-- )
 				shift
@@ -1558,6 +1573,14 @@ lbt_rm() {
 		exit 1
 	fi
 
+	if [ -z "$rm_color" ]; then
+		if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
+			rm_color=y
+		else
+			rm_color=n
+		fi
+	fi
+
 	if [ -z "$1" ]; then
 		echo "Usage: lbt rm URL [option...]"
 		echo "Try 'lbt rm --help' to get more information"
@@ -1575,7 +1598,7 @@ lbt_rm() {
 
 
 
-feed() {
+lbt_feed() {
 	options=hsp:n:c::Sdt
 	longopts=help,sfeed,start-page:,pages:,color::,plain,time
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
@@ -1692,7 +1715,7 @@ feed() {
 
 	if [ -z "$feed_color" ]; then
 		# output is a TTY and not outputting in sfeed format
-		if [ -t 1 ] && [ -z "$feed_sfeed" ]; then
+		if [ -t 1 ] && [ -z "$feed_sfeed" ] && [ -z "$NO_COLOR" ]; then
 			feed_color=y
 		else
 			feed_color=n
@@ -1820,7 +1843,7 @@ lbt_help_generic() {
 }
 
 lbt_version() {
-	if [ -t 1 ]; then
+	if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
 		printf '%s%s%s\n' "$format_bold" "lbt $VERSION" "$format_reset"
 	else
 		echo "lbt $VERSION"
@@ -1897,14 +1920,14 @@ case "$lbt_command" in
 			lbt_help_open
 			exit 0
 		fi
-		open "$@"
+		lbt_open "$@"
 		;;
 	get )
 		if [ -n "$lbt_help" ]; then
 			lbt_help_get
 			exit 0
 		fi
-		get "$@"
+		lbt_get "$@"
 		;;
 	ls )
 		if [ -n "$lbt_help" ]; then
@@ -1925,7 +1948,7 @@ case "$lbt_command" in
 			lbt_help_feed
 			exit 0
 		fi
-		feed "$@"
+		lbt_feed "$@"
 		;;
 	* )
 		echo "Programming error: unknown command??"
