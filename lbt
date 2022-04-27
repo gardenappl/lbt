@@ -5,7 +5,7 @@ set -o errexit
 
 config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
 api_lbry_com="https://api.lbry.com"
-VERSION='2.1.2'
+VERSION='2.2.0'
 
 
 format_bold='\033[1m'
@@ -228,7 +228,7 @@ is_running() {
 lbrynet_start_if_needed() {
 	if ! pidof "lbrynet" > /dev/null; then
 		if lbt_config_bool 'autostart_local_lbrynet' true; then
-			if ! command -v "lbrynet"; then
+			if ! command -v "lbrynet" > /dev/null; then
 				print_error 'Unable to find "lbrynet" executable in $PATH'
 				print_error "If you've installed LBRY on this system, see"
 				print_error "https://lbry.com/faq/how-to-cli for where to find lbrynet."
