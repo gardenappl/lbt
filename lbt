@@ -43,13 +43,17 @@ EOF
 fi
 
 
+config_default_custom_open_command='run-mailcap --action-view "$mimetype:$1"'
+config_default_remote_lbrynet_url_http='localhost:5279'
+
 if [ ! -f "$config_dir/config.json" ]; then
 	cat << EOF > "$config_dir/config.json"
 {
 	"use_xdg_open": true,
-	"custom_open_command": "run-mailcap --action=view \"\$mimetype:\$1\"",
+	"custom_open_command": "$config_default_custom_open_command",
 	"use_local_lbrynet": true,
-	"remote_lbrynet_url_http": "localhost:5279"
+	"autostart_local_lbrynet": true,
+	"remote_lbrynet_url_http": "$config_default_remote_lbrynet_url_http"
 }
 EOF
 
@@ -199,7 +203,7 @@ lbrynet_check_error() {
 			esac
 			;;
 		* )
-			print_error "Error in LBRY daemon."
+			print_error "Error."
 			print_error "$1"
 			exit 1
 			;;
@@ -223,31 +227,46 @@ is_running() {
 
 lbrynet_start_if_needed() {
 	if ! pidof "lbrynet" > /dev/null; then
-		printf_info "Starting LBRY daemon... "
-		lbrynet start 2>/dev/null > /dev/null &
-		while sleep 0.5; do
-			lbrynet_status=$(lbrynet status)
-			if is_running "$lbrynet_status"; then
-				print_info "Done."
-				break
+		if lbt_config_bool 'autostart_local_lbrynet' true; then
+			if ! command -v "lbrynet"; then
+				print_error 'Unable to find "lbrynet" executable in $PATH'
+				print_error "If you've installed LBRY on this system, see"
+				print_error "https://lbry.com/faq/how-to-cli for where to find lbrynet."
+				return 1
 			fi
-		done
+			printf_info "Starting LBRY daemon... "
+			lbrynet start 2>/dev/null > /dev/null &
+			while sleep 0.5; do
+				lbrynet_status=$(lbrynet status)
+				if is_running "$lbrynet_status"; then
+					print_info "Done."
+					break
+				fi
+			done
+		else
+			print_error "Error: lbrynet is not running."
+			return 1
+		fi
 	fi
 }
 
 
 lbt_config_string() {
-	printf '%s' "$lbt_config" | jq ".$1" --raw-output
+	(printf '%s' "$lbt_config" | jq ".$1" --raw-output --exit-status) || printf '%s' "$2"
 }
 
 lbt_config_bool() {
-	printf '%s' "$lbt_config" | jq ".$1" --exit-status > /dev/null
+	value="$(json_value "$lbt_config" "$1")"
+	if [ "$value" = 'null' ] || [ -z "$value" ]; then
+		value="$2"
+	fi
+	[ "$value" = 'true' ]
 }
 
 init_lbt_config() {
 	lbt_config=$(cat "$config_dir/config.json")
 
-	if lbt_config_bool 'use_local_lbrynet'; then
+	if lbt_config_bool 'use_local_lbrynet' true; then
 		lbrynet_local=y
 
 		lbrynet_start_if_needed
@@ -256,26 +275,25 @@ init_lbt_config() {
 		lbrynet_check_error "$lbrynet_config"
 		api_server=$(json_value "$lbrynet_config" "api")
 	else
-		api_server=$(lbt_config_string 'remote_lbrynet_url_http')
+		api_server=$(lbt_config_string 'remote_lbrynet_url_http' "$config_default_remote_lbrynet_url_http")
 	fi
 }
 
-
-lbrynet_version() {
-	curl --silent -d"{\"method\": \"version\"}" "$api_server"
+api_get() {
+	curl --silent --show-error "$api_server" -d"$1"
 }
 
 lbrynet_get() {
-	curl --silent -d"{\"method\": \"get\", \"params\": {\"uri\": \"$1\"}}" "$api_server"
+	api_get "{\"method\": \"get\", \"params\": {\"uri\": \"$1\"}}"
 }
 
 lbrynet_get_save() {
-	curl --silent -d"{\"method\": \"get\", \"params\": {\"uri\": \"$1\", \"save_file\": true}}" "$api_server"
+	api_get "{\"method\": \"get\", \"params\": {\"uri\": \"$1\", \"save_file\": true}}"
 }
 
 lbrynet_search_claim_id_local() {
 	claim_id="${1#\#}"
-	claim_info="$(curl --silent -d"{\"method\": \"file_list\", \"params\": {\"claim_id\": \"$claim_id\"}}" "$api_server")"
+	claim_info="$(api_get "{\"method\": \"file_list\", \"params\": {\"claim_id\": \"$claim_id\"}}")"
 	lbrynet_check_error "$claim_info"
 
 	if [ "$(result_value "$claim_info" "total_items")" -ne 1 ]; then
@@ -287,7 +305,7 @@ lbrynet_search_claim_id_local() {
 
 lbrynet_search_claim_id() {
 	claim_id="${1#\#}"
-	claim_info="$(curl --silent -d"{\"method\": \"claim_search\", \"params\": {\"claim_id\": \"$claim_id\"}}" "$api_server")"
+	claim_info="$(api_get "{\"method\": \"claim_search\", \"params\": {\"claim_id\": \"$claim_id\"}}")"
 	lbrynet_check_error "$claim_info"
 
 	if [ "$(result_value "$claim_info" "total_items")" -ne 1 ]; then
@@ -298,9 +316,9 @@ lbrynet_search_claim_id() {
 }
 
 lbrynet_get_claim_id() {
-	lbrynet_info="$(curl "$api_server" --silent -d"{\"method\": \"resolve\", \"params\": {\"urls\": [\"$1\"]}}" \
-		| jq '.result|to_entries|.[0]|.value')"
+	lbrynet_info="$(api_get "{\"method\": \"resolve\", \"params\": {\"urls\": [\"$1\"]}}")"
 	lbrynet_check_error "$lbrynet_info"
+	lbrynet_info="$(printf '%s' "$lbrynet_info" | jq '.result|to_entries|.[0]|.value')"
 	printf '%s' "$lbrynet_info" | jq --raw-output '.claim_id'
 }
 
@@ -354,8 +372,8 @@ check_incompatible() {
 
 get_lbry_url_from_youtube() {
 	printf_info "%s: querying LBRY x YouTube Sync service... " "$1"
-	lbry_url="$(curl "$api_lbry_com/yt/resolve?video_ids=$1" --max-time 10 --silent | jq ".data.videos[\"$1\"]" --raw-output)"
-	if [ "$lbry_url" = "null" ]; then
+	lbry_url="$(curl "$api_lbry_com/yt/resolve?video_ids=$1" --max-time 10 --silent --show-error | jq ".data.videos[\"$1\"]" --raw-output)"
+	if [ "$lbry_url" = "null" ] || [ -z "$lbry_url" ]; then
 		print_error "LBRY video for $1 not found."
 		exit 1
 	else
@@ -476,13 +494,14 @@ do_mimetype_action() {
 	url=$(lbry_get_url "$action" "$3")
 
 
-	if lbt_config_bool 'use_xdg_open'; then
+	if lbt_config_bool 'use_xdg_open' true; then
 		print_info "Type: $2"
 		application="$(xdg-mime query default "$2")"
 		print_info "Application: $application"
 		( gtk-launch "$application" "$url" )
 	else
-		command=$(lbt_config_string 'custom_open_command' | sed "s|\$1|$url|g; s|\$mimetype|$2|g")
+		command=$(lbt_config_string 'custom_open_command' "$config_default_custom_open_command" \
+				| sed "s|\$1|$url|g; s|\$mimetype|$2|g")
 		print_info "Command: $command"
 		( eval "$command" )
 	fi
@@ -626,7 +645,7 @@ output_to_file() {
 		exit 0
 	fi
 	if [ -n "$quiet" ]; then
-		curl_initial_args="--silent"
+		curl_initial_args="--silent --show-error"
 	else
 		curl_initial_args="--progress-meter"
 	fi
@@ -785,7 +804,7 @@ lbt_get() {
 			if is_download_complete "$lbrynet_info"; then
 				cat "$(result_value "$lbrynet_info" "download_path")"
 			else
-				curl --silent "$(result_value "$lbrynet_info" "streaming_url")"
+				curl --silent --show-error "$(result_value "$lbrynet_info" "streaming_url")"
 			fi
 		elif [ "$action" = "save" ]; then
 			if ! is_download_complete "$lbrynet_info"; then
@@ -794,7 +813,7 @@ lbt_get() {
 				cat "$(result_value "$lbrynet_info" "download_path")"
 			fi
 		elif [ "$action" = "stream" ]; then
-			curl --silent "$(result_value "$lbrynet_info" "streaming_url")"
+			curl --silent --show-error "$(result_value "$lbrynet_info" "streaming_url")"
 		fi
 	fi
 }
@@ -983,7 +1002,7 @@ lbrynet_list_files() {
 	esac
 
 	while [ $page -le $total_pages ]; do
-		list_info="$(curl --silent -d"{\"method\": \"file_list\", \"params\": {\"page\": $page, \"page_size\": 100$list_params}}" "$api_server")"
+		list_info="$(api_get "{\"method\": \"file_list\", \"params\": {\"page\": $page, \"page_size\": 100$list_params}}")"
 		lbrynet_check_error "$list_info"
 
 
@@ -1471,11 +1490,11 @@ lbt_rm_single() {
 	fi
 
 	# Deleting blobs
-	curl_data='{"method": "file_delete", "params": {"delete_from_download_dir":'
+	api_request='{"method": "file_delete", "params": {"delete_from_download_dir":'
 	if [ -n "$rm_file" ]; then
-		curl_data="$curl_data true"
+		api_request="$api_request true"
 	else
-		curl_data="$curl_data false"
+		api_request="$api_request false"
 	fi
 
 	case "$1" in
@@ -1499,9 +1518,9 @@ lbt_rm_single() {
 	else
 		printf_info '%s - %s ' "$url" "$action_string"
 	fi
-	curl_data="$curl_data, \"claim_id\": \"$claim_id\"}}"
+	api_request="$api_request, \"claim_id\": \"$claim_id\"}}"
 
-	if curl --silent -d"$curl_data" "$api_server" | grep -q '"result": false'; then
+	if api_get "$api_request" | grep -q '"result": false'; then
 		print_error "Failed."
 		exit 1
 	else
@@ -1683,7 +1702,7 @@ lbt_feed() {
 				print_info "Note: missing file $config_dir/feeds"
 				print_info "and no channels are provided in arguments."
 				print_info
-				print_info "Enter channels into standard input (Ctrl+D to finish):"
+				print_info "Enter channels here: (Ctrl+D to finish)"
 			fi
 			input_channels="$(tee)"
 		else
@@ -1753,7 +1772,7 @@ lbt_feed() {
 
 	# Output JSON data to jq command
 	while [ "$page" -lt $((feed_start_page + feed_pages)) ]; do
-		claim_info="$(curl --silent -d"{\
+		claim_info="$(api_get "{\
 			\"method\": \"claim_search\",\
 			\"params\": {\
 				\"page\": $page,\
@@ -1761,7 +1780,7 @@ lbt_feed() {
 				\"valid_channel_signature\": true,\
 				\"no_totals\": true,\
 				\"order_by\": \"release_time\"\
-			}}" "$api_server")"
+			}}")"
 		lbrynet_check_error "$claim_info"
 		printf '%s' "$claim_info" | jq --raw-output "$jq_command"
 		page=$((page + 1))
@@ -1851,7 +1870,7 @@ lbt_version() {
 	echo "LBRY daemon info:"
 
 	init_lbt_config
-	lbrynet_version | jq '.result'
+	api_get '{"method": "version"}' | jq '.result'
 }
 
 while true; do
