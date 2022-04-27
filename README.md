@@ -56,7 +56,7 @@ application/pdf	save
 }
 ```
 
-(I recommend [https://github.com/cglindkamp/run-mailcap-rs](run-mailcap-rs), as the original Ubuntu version of `run-mailcap` doesn't work right with http:// links)
+(I recommend [run-mailcap-rs](https://github.com/cglindkamp/run-mailcap-rs), as the original Ubuntu version of `run-mailcap` doesn't work right with http:// links)
 
 The config files are automatically generated on the first run. The simplest way to find out the MIME type is with the program's `--get-mime` parameter, for example:
 
@@ -174,4 +174,4 @@ Unimplemented features:
 4. Shell completion
 5. Publishing content, I will not do this because:
   * `lbrynet publish` does a decent job
-  * [https://gitlab.com/gardenappl/lbry-sync-ytdl](lbry-sync-ytdl) is another CLI tool by me which can publish an entire playlist of video/audio from youtube-dl
+  * **[lbry-sync-ytdl](https://gitlab.com/gardenappl/lbry-sync-ytdl)** is another CLI tool by me which can publish an entire playlist of video/audio from youtube-dl
