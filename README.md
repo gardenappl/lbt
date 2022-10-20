@@ -18,8 +18,9 @@ lbt can also convert **some YouTube video links** to LBRY videos automatically, 
 
 **lbt** might be useful if:
 
-* You don't want to use the official Electron app or the lbry.tv web interface (which some might call "bloated").
-* You want to work with LBRY content in your own shell scripts but don't want to mess with JSON output.
+* You don't want to use the official Electron app (which some might call "bloated" for a YouTube alternative)
+* You don't want to use the Odysee web interface, because you'd rather contribute to the P2P network with your own machine
+* You want to work with LBRY content in shell scripts but don't want to mess with JSON output.
 
 ## Commands
 
@@ -168,10 +169,10 @@ If you want to use `lbt open` as the default handler for lbry:// links:
 
 Unimplemented features:
 
-1. Interacting with paid content (I'm too scared to touch the crypto wallet stuff)
+1. Interacting with paid content (I'm too scared to touch the crypto wallet stuff, and currently there isn't much paywalled content on the network anyway)
 2. Localization
 3. `man` page
 4. Shell completion
 5. Publishing content, I will not do this because:
   * `lbrynet publish` does a decent job
-  * **[lbry-sync-ytdl](https://gitlab.com/gardenappl/lbry-sync-ytdl)** is another CLI tool by me which can publish an entire playlist of video/audio from youtube-dl
+  * **[lbry-sync-ytdl](https://gitlab.com/gardenappl/lbry-sync-ytdl)** is another CLI tool by me which can publish an entire playlist from youtube-dl

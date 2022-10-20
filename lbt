@@ -1908,6 +1908,11 @@ while true; do
 			lbt_version=y
 			shift
 			;;
+		-* )
+			echo "Unknown option: $1"
+			lbt_print_usage
+			exit 1
+			;;
 		"" )
 			if [ -n "$lbt_version" ]; then
 				lbt_version
