@@ -107,13 +107,13 @@ lbt_help_get() {
 "Usage: lbt get URL [options...]
    or  lbt get #CLAIM_ID [options...]
 
-	-f, --file		Save content as a file and print download path
+	-f, --file		(When used with --resolve) Save content as a file and print download path
 	-F, --force-save 	Save content as a file even if that's not needed
 	-h, --help		Print help
 	-O, --output FILE 	Write output to FILE (or, if the content already exists on the local machine, create a sym-link)
 	-q, --quiet 		Don't output extra information, besides error messages
-	-r, --resolve		Instead of printing file to stdout, print either an HTTP URL or a local file path
-	-s, --stream		Create HTTP stream and print its URL
+	-r, --resolve		Instead of printing file to stdout, print 'canonical' LBRY URL
+	-s, --stream		(When used with --resolve) Create HTTP stream and print its URL
 	-t, --terminal		Enable printing output to the terminal"
 }
 
@@ -141,15 +141,6 @@ lbt_help_rm() {
 	-h, --help	 	Print help
 	-n, --no-blobs 		Don't remove stored blobs (requires --file)
 	-q, --quiet 		Don't output extra information, besides error messages"
-}
-
-
-json_value() {
-	printf '%s' "$1" | jq -r ".$2"
-}
-
-result_value() {
-	printf '%s' "$1" | jq -r ".result.$2"
 }
 
 # from dylanaraps' Pure Sh Bible, MIT License
@@ -188,6 +179,31 @@ trim_quotes() {
 	set +f
 }
 
+
+
+json_value() {
+	printf '%s' "$1" | jq -r ".$2"
+}
+
+to_json_value() {
+	jq -r ".$1"
+}
+
+result_value() {
+	printf '%s' "$1" | jq -r ".result.$2"
+}
+
+to_result_value() {
+	jq -r ".result.$1"
+}
+
+first_result_value() {
+	printf '%s' "$1" | jq -r ".result|to_entries|.[0]|.value|.$2"
+}
+
+to_first_result_value() {
+	jq -r ".result|to_entries|.[0]|.value|.$1"
+}
 
 
 lbrynet_check_error() {
@@ -283,6 +299,10 @@ api_get() {
 	curl --silent --show-error "$api_server" -d"$1"
 }
 
+lbrynet_resolve() {
+	api_get "{\"method\": \"resolve\", \"params\": {\"urls\": \"$1\"}}"
+}
+
 lbrynet_get() {
 	api_get "{\"method\": \"get\", \"params\": {\"uri\": \"$1\"}}"
 }
@@ -313,13 +333,6 @@ lbrynet_search_claim_id() {
 		exit 1
 	fi
 	printf '%s' "$claim_info" | jq '.result.items|.[]'
-}
-
-lbrynet_get_claim_id() {
-	lbrynet_info="$(api_get "{\"method\": \"resolve\", \"params\": {\"urls\": [\"$1\"]}}")"
-	lbrynet_check_error "$lbrynet_info"
-	lbrynet_info="$(printf '%s' "$lbrynet_info" | jq '.result|to_entries|.[0]|.value')"
-	printf '%s' "$lbrynet_info" | jq --raw-output '.claim_id'
 }
 
 
@@ -605,13 +618,16 @@ lbt_open() {
 			;;
 	esac
 
+	if [ -n "$check" ]; then
+		exit 0
+	fi
+
 
 	init_lbt_config
 
 	if [ -n "$is_claim_id" ]; then
-		claim_info="$(lbrynet_search_claim_id "$1")"
 		print_info "Searching for claim ID... "
-		url="$(json_value "$claim_info" "canonical_url")"
+		url="$(lbrynet_search_claim_id "$1" | to_json_value 'canonical_url')"
 		print_info "Resolving $url..."
 	fi
 	lbrynet_info="$(lbrynet_get "$url")"
@@ -736,11 +752,6 @@ lbt_get() {
 			print_error "Error: --stream option must be used with --resolve"
 			exit 1
 		fi
-	else
-		if [ -n "$resolve" ]; then
-			print_error "Error: either --file or --stream option must be used with --resolve"
-			exit 1
-		fi
 	fi
 
 	if [ -z "$resolve" ] && [ -z "$output_file" ] && [ -z "$allow_terminal" ] && [ -t 1 ]; then
@@ -764,6 +775,10 @@ lbt_get() {
 		done
 	fi
 
+	if [ -n "$resolve" ] && [ -z "$action" ]; then
+		quiet=y
+	fi
+
 
 	init_lbt_config
 
@@ -774,7 +789,9 @@ lbt_get() {
 			;;
 		* )
 			url="$(normalize_lbry_url "$1")"
-			if [ "$url" != "$1" ]; then
+			if [ -n "$resolve" ] && [ -z "$action" ]; then
+				url="$(lbrynet_resolve "$url" | to_first_result_value 'canonical_url')"
+			elif [ "$url" != "$1" ]; then
 				print_info "Resolving $url..."
 			fi
 			;;
@@ -784,10 +801,14 @@ lbt_get() {
 
 
 	if [ -n "$is_claim_id" ]; then
-		claim_info="$(lbrynet_search_claim_id "$1")"
 		print_info "Searching for claim ID... "
-		url="$(json_value "$claim_info" "canonical_url")"
+		url="$(lbrynet_search_claim_id "$1" | to_json_value 'canonical_url')"
 		print_info "Resolving $url..."
+	fi
+
+	if [ -n "$resolve" ] && [ -z "$action" ]; then
+		printf '%s' "$url"
+		exit 0
 	fi
 
 	lbrynet_info="$(lbrynet_get "$url")"
@@ -1505,7 +1526,7 @@ lbt_rm_single() {
 			;;
 		* )
 			url="$(normalize_lbry_url "$1")"
-			claim_id="$(lbrynet_get_claim_id "$url")"
+			claim_id="$(lbrynet_resolve "$url" | to_first_result_value 'claim_id')"
 			;;
 	esac
 	if [ -n "$rm_file" ]; then
@@ -1519,9 +1540,10 @@ lbt_rm_single() {
 		printf_info '%s - %s ' "$url" "$action_string"
 	fi
 	api_request="$api_request, \"claim_id\": \"$claim_id\"}}"
-
-	if api_get "$api_request" | grep -q '"result": false'; then
+	result="$(api_get "$api_request")"
+	if printf '%s' "$result" | grep -q '"result": false'; then
 		print_error "Failed."
+		print_error "$result"
 		exit 1
 	else
 		print_info "Done."
@@ -1717,7 +1739,7 @@ lbt_feed() {
 				;;
 			* )
 				url="$(normalize_lbry_url "$channel")"
-				claim_id="$(lbrynet_get_claim_id "$url")"
+				claim_id="$(lbrynet_resolve "$url" | to_first_result_value 'claim_id')"
 				;;
 		esac
 		if [ -z "$channel_id_list" ]; then
