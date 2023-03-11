@@ -43,6 +43,7 @@ EOF
 fi
 
 
+#shellcheck disable=SC2016
 config_default_custom_open_command='run-mailcap --action-view "$mimetype:$1"'
 config_default_remote_lbrynet_url_http='localhost:5279'
 
@@ -112,7 +113,7 @@ lbt_help_get() {
 	-h, --help		Print help
 	-O, --output FILE 	Write output to FILE (or, if the content already exists on the local machine, create a sym-link)
 	-q, --quiet 		Don't output extra information, besides error messages
-	-r, --resolve		Instead of printing file to stdout, print 'canonical' LBRY URL
+	-r, --resolve		Instead of printing file to stdout, print canonical LBRY URL
 	-s, --stream		(When used with --resolve) Create HTTP stream and print its URL
 	-t, --terminal		Enable printing output to the terminal"
 }
@@ -205,6 +206,13 @@ to_first_result_value() {
 	jq -r ".result|to_entries|.[0]|.value|.$1"
 }
 
+read_line_vars() {
+	while [ -n "$1" ]; do
+		read -r "$1"
+		shift
+	done
+}
+
 
 lbrynet_check_error() {
 	case "$1" in
@@ -226,44 +234,62 @@ lbrynet_check_error() {
 	esac
 }
 
-
-is_running() {
-	case "$1" in
-		\{* )
-			#If starts with {, assume valid JSON
-			case "$1" in
-				*'"is_running": true'* )
-					return 0
-					;;
-			esac
-			;;
-	esac
-	return 1
-}
-
 lbrynet_start_if_needed() {
 	if ! pidof "lbrynet" > /dev/null; then
 		if lbt_config_bool 'autostart_local_lbrynet' true; then
 			if ! command -v "lbrynet" > /dev/null; then
+				#shellcheck disable=SC2016
 				print_error 'Unable to find "lbrynet" executable in $PATH'
 				print_error "If you've installed LBRY on this system, see"
 				print_error "https://lbry.com/faq/how-to-cli for where to find lbrynet."
 				return 1
 			fi
-			printf_info "Starting LBRY daemon... "
-			lbrynet start 2>/dev/null > /dev/null &
-			while sleep 0.5; do
-				lbrynet_status=$(lbrynet status)
-				if is_running "$lbrynet_status"; then
-					print_info "Done."
-					break
-				fi
-			done
+			lbrynet_starting=y
+			printf_info "Starting LBRY daemon, this may take a while"
+			lbrynet start 2> /dev/null > /dev/null &
+			sleep 2
 		else
 			print_error "Error: lbrynet is not running."
 			return 1
 		fi
 	fi
+	displayed_startup_count=0
+	while true; do
+		set +o errexit
+		result_pair="$(lbrynet status | jq -r '
+			( .is_running | tostring ) + " " +
+			( [ .startup_status | to_entries | .[] | select(.value) ] | length | tostring)
+		' 2> /dev/null)"
+		set -o errexit
+		is_running="${result_pair% *}"
+		startup_count="${result_pair#* }"
+
+		# Handle jq error if 'lbrynet status' does not return valid JSON
+		if [ "$is_running" != true ] && [ "$is_running" != false ]; then
+			is_running=false
+			startup_count=0
+		fi
+
+		if [ -z "$lbrynet_starting" ]; then
+			if [ "$is_running" = true ]; then
+				return 0
+			fi
+			printf_info "LBRY daemon is starting, this may take a while"
+			lbrynet_starting=y
+		fi
+
+		while [ "$displayed_startup_count" -lt "$startup_count" ]; do
+			printf_info '.'
+			displayed_startup_count="$((displayed_startup_count + 1))"
+		done
+
+		if [ "$is_running" = true ]; then
+			print_info '. Done.'
+			break
+		else
+			sleep 1
+		fi
+	done
 }
 
 
@@ -295,25 +321,43 @@ init_lbt_config() {
 	fi
 }
 
-api_get() {
-	curl --silent --show-error "$api_server" -d"$1"
+api_call() {
+	if [ -n "$2" ]; then
+		curl --silent --show-error "$api_server" -d'{
+			"method": "'"$1"'",
+			"params": '"$2"'
+		}'
+	else
+		curl --silent --show-error "$api_server" -d'{ 
+			"method": "'"$1"'" 
+		}'
+	fi
 }
 
 lbrynet_resolve() {
-	api_get "{\"method\": \"resolve\", \"params\": {\"urls\": \"$1\"}}"
+	api_call resolve '{
+		"urls": "'"$1"'"
+	}'
 }
 
 lbrynet_get() {
-	api_get "{\"method\": \"get\", \"params\": {\"uri\": \"$1\"}}"
+	api_call get '{
+		"uri": "'"$1"'"
+	}'
 }
 
 lbrynet_get_save() {
-	api_get "{\"method\": \"get\", \"params\": {\"uri\": \"$1\", \"save_file\": true}}"
+	api_call get '{
+		"uri": "'"$1"'", 
+		"save_file": true
+	}'
 }
 
 lbrynet_search_claim_id_local() {
 	claim_id="${1#\#}"
-	claim_info="$(api_get "{\"method\": \"file_list\", \"params\": {\"claim_id\": \"$claim_id\"}}")"
+	claim_info="$(api_call file_list '{
+		"claim_id": "'"$claim_id"'"
+	}')"
 	lbrynet_check_error "$claim_info"
 
 	if [ "$(result_value "$claim_info" "total_items")" -ne 1 ]; then
@@ -325,7 +369,9 @@ lbrynet_search_claim_id_local() {
 
 lbrynet_search_claim_id() {
 	claim_id="${1#\#}"
-	claim_info="$(api_get "{\"method\": \"claim_search\", \"params\": {\"claim_id\": \"$claim_id\"}}")"
+	claim_info="$(api_call claim_search '{
+		"claim_id": "'"$claim_id"'"
+	}')"
 	lbrynet_check_error "$claim_info"
 
 	if [ "$(result_value "$claim_info" "total_items")" -ne 1 ]; then
@@ -775,10 +821,6 @@ lbt_get() {
 		done
 	fi
 
-	if [ -n "$resolve" ] && [ -z "$action" ]; then
-		quiet=y
-	fi
-
 
 	init_lbt_config
 
@@ -807,7 +849,7 @@ lbt_get() {
 	fi
 
 	if [ -n "$resolve" ] && [ -z "$action" ]; then
-		printf '%s' "$url"
+		printf '%s\n' "$url"
 		exit 0
 	fi
 
@@ -1022,8 +1064,11 @@ lbrynet_list_files() {
 		# sorting by size, MIME type, etc. is handled separately
 	esac
 
-	while [ $page -le $total_pages ]; do
-		list_info="$(api_get "{\"method\": \"file_list\", \"params\": {\"page\": $page, \"page_size\": 100$list_params}}")"
+	while [ "$page" -le "$total_pages" ]; do
+		list_info="$(api_call file_list '{
+			"page": '"$page"', 
+			"page_size": 100'"$list_params"'
+		}')"
 		lbrynet_check_error "$list_info"
 
 
@@ -1043,14 +1088,14 @@ lbrynet_list_files() {
 				#claim ID
 				\"i\"* )
 					if [ "$ls_color" = y ]; then
-						printf "$format_black_bright"
+						printf '%s' "$format_black_bright"
 					fi
 					printf '%s' "$line"
 					;;
 				#added on datetime
 				\"a\"* )
 					if [ "$ls_color" = y ]; then
-						printf "$format_blue"
+						printf '%s' "$format_blue"
 					fi
 					printf '%s' "$line"
 					;;
@@ -1090,18 +1135,18 @@ lbrynet_list_files() {
 						# in the correct order
 						printf '3'
 						if [ "$ls_color" = y ]; then
-							printf "$format_green"
+							printf '%s' "$format_green"
 						fi
 					elif [ -n "$is_empty" ]; then
 						printf '1'
 						if [ "$ls_color" = y ]; then
-							printf "$format_red"
+							printf '%s' "$format_red"
 						fi
 						printf '!'
 					else
 						printf '2'
 						if [ "$ls_color" = y ]; then
-							printf "$format_yellow"
+							printf '%s' "$format_yellow"
 						fi
 						printf '<'
 					fi
@@ -1113,7 +1158,7 @@ lbrynet_list_files() {
 				#MIME type
 				\"m\"* )
 					if [ "$ls_color" = y ]; then
-						printf "$format_magenta"
+						printf '%s' "$format_magenta"
 					fi
 					printf '%s' "$line"
 					;;
@@ -1126,11 +1171,11 @@ lbrynet_list_files() {
 				\"t\"* )
 					if [ "$ls_color" = y ]; then
 						if [ -n "$is_full" ]; then
-							printf "$format_green"
+							printf '%s' "$format_green"
 						elif [ -n "$is_empty" ]; then
-							printf "$format_red"
+							printf '%s' "$format_red"
 						else
-							printf "$format_yellow"
+							printf '%s' "$format_yellow"
 						fi
 					fi
 
@@ -1141,7 +1186,7 @@ lbrynet_list_files() {
 					;;
 				\"c\"* )
 					if [ "$ls_color" = y ]; then
-						printf "${format_cyan}${format_bold}%s${format_reset}" "$line"
+						printf "${format_cyan}${format_bold}%s${format_reset}" "$line" 
 					else
 						printf '%s' "$line"
 					fi
@@ -1150,11 +1195,11 @@ lbrynet_list_files() {
 				\"n\"* )
 					if [ "$ls_color" = y ]; then
 						if [ -n "$is_full" ]; then
-							printf "$format_green"
+							printf '%s' "$format_green"
 						elif [ -n "$is_empty" ]; then
-							printf "$format_red"
+							printf '%s' "$format_red"
 						else
-							printf "$format_yellow"
+							printf '%s' "$format_yellow"
 						fi
 						printf "${format_bold}%s${format_reset}" "$line"
 					else
@@ -1169,7 +1214,7 @@ lbrynet_list_files() {
 					;;
 				\"p\"* )
 					if [ "$ls_color" = y ]; then
-						printf "$format_reset"
+						printf '%s' "$format_reset"
 					fi
 					if [ -n "$ls_not_files" ]; then
 						printf '""DELETE THIS""'
@@ -1470,54 +1515,42 @@ lbt_ls() {
 }
 
 
-
-lbt_rm_single() {
-	# Not deleting blobs
-	
-	if [ -n "$rm_no_blobs" ]; then
+lbt_rm_file() {
+	case "$1" in
+		\#* )
+			claim_id="${1#\#}"
+			result="$(lbrynet_search_claim_id_local "$claim_id")"
+			url="$(printf '%s' "$result" | jq '[.claim_name, .claim_id] | join(":")' --raw-output)"
+			;;
+		* )
+			url="$(normalize_lbry_url "$1")"
+			result="$(lbrynet_get "$url" | jq '.result')"
+			lbrynet_check_error "$result"
+			;;
+	esac
+	if [ -n "$rm_color" ]; then
+		printf_info "${format_cyan}%s${format_reset} - deleting file... " "$url"
+	else
+		printf_info '%s - deleting file... ' "$url"
+	fi
+	if printf '%s' "$result" | grep -q '"download_path": null'; then
 		case "$1" in
 			\#* )
-				claim_id="${1#\#}"
-				result="$(lbrynet_search_claim_id_local "$claim_id")"
-				url="$(printf '%s' "$result" | jq '[.claim_name, .claim_id] | join(":")' --raw-output)"
+				print_error "Not saved as file"
 				;;
 			* )
-				url="$(normalize_lbry_url "$1")"
-				result="$(lbrynet_get "$url" | jq '.result')"
-				lbrynet_check_error "$result"
+				print_error "Not saved as file (try searching via claim ID?)"
 				;;
 		esac
-		if [ -n "$rm_color" ]; then
-			printf_info "${format_cyan}%s${format_reset} - deleting file... " "$url"
-		else
-			printf_info '%s - deleting file... ' "$url"
-		fi
-		if printf '%s' "$result" | grep -q '"download_path": null'; then
-			case "$1" in
-				\#* )
-					print_error "Not saved as file"
-					;;
-				* )
-					print_error "Not saved as file (try searching via claim ID?)"
-					;;
-			esac
-			exit 1
-		fi
-		path=$(printf '%s' "$result" | jq --raw-output '.download_path')
-		path=$(realpath --relative-base "$PWD" "$path")
-		rm -- "$path"
-		print_info "Deleted '$path'"
-		return
+		exit 1
 	fi
+	path=$(printf '%s' "$result" | jq --raw-output '.download_path')
+	path=$(realpath --relative-base "$PWD" "$path")
+	rm -- "$path"
+	print_info "Deleted '$path'"
+}
 
-	# Deleting blobs
-	api_request='{"method": "file_delete", "params": {"delete_from_download_dir":'
-	if [ -n "$rm_file" ]; then
-		api_request="$api_request true"
-	else
-		api_request="$api_request false"
-	fi
-
+lbt_rm_lbrynet() {
 	case "$1" in
 		\#* )
 			claim_id="${1#\#}"
@@ -1539,11 +1572,17 @@ lbt_rm_single() {
 	else
 		printf_info '%s - %s ' "$url" "$action_string"
 	fi
-	api_request="$api_request, \"claim_id\": \"$claim_id\"}}"
-	result="$(api_get "$api_request")"
-	if printf '%s' "$result" | grep -q '"result": false'; then
-		print_error "Failed."
-		print_error "$result"
+	api_call_params='{
+		claim_id: "'"$claim_id"'",
+		delete_from_download_dir: '"$(if [ -n "$rm_file" ]; then 
+			echo 'true'
+		else 
+			echo 'false' 
+		fi)"',
+	}'
+	if api_call file_delete "$api_call_params" | grep -q '"result": false'; then
+		print_error "Failed. The associated claim ID might not be present in the local LBRY."
+		# print_error "$result"
 		exit 1
 	else
 		print_info "Done."
@@ -1632,7 +1671,11 @@ lbt_rm() {
 	init_lbt_config
 
 	while [ -n "$1" ]; do
-		lbt_rm_single "$1"
+		if [ -n "$rm_no_blobs" ]; then
+			lbt_rm_file "$1"
+		else
+			lbt_rm_lbrynet "$1"
+		fi
 		shift
 	done
 }
@@ -1794,15 +1837,13 @@ lbt_feed() {
 
 	# Output JSON data to jq command
 	while [ "$page" -lt $((feed_start_page + feed_pages)) ]; do
-		claim_info="$(api_get "{\
-			\"method\": \"claim_search\",\
-			\"params\": {\
-				\"page\": $page,\
-				\"channel_ids\": [ $channel_id_list ],\
-				\"valid_channel_signature\": true,\
-				\"no_totals\": true,\
-				\"order_by\": \"release_time\"\
-			}}")"
+		claim_info="$(api_call claim_search '{
+			"page": '"$page"',
+			"channel_ids": [ '"$channel_id_list"' ],
+			"valid_channel_signature": true,
+			"no_totals": true,
+			"order_by": "release_time"
+		}')"
 		lbrynet_check_error "$claim_info"
 		printf '%s' "$claim_info" | jq --raw-output "$jq_command"
 		page=$((page + 1))
@@ -1885,14 +1926,14 @@ lbt_help_generic() {
 
 lbt_version() {
 	if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
-		printf '%s%s%s\n' "$format_bold" "lbt $VERSION" "$format_reset"
+		printf "${format_bold}lbt %s${format_reset}\n" "$VERSION"
 	else
 		echo "lbt $VERSION"
 	fi
 	echo "LBRY daemon info:"
 
 	init_lbt_config
-	api_get '{"method": "version"}' | jq '.result'
+	api_call version | jq '.result'
 }
 
 while true; do
