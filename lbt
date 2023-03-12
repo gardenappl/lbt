@@ -3,27 +3,28 @@
 set -o errexit
 
 
-config_dir="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
-api_lbry_com="https://api.lbry.com"
-VERSION='2.2.0'
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
+CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/lbt"
+API_LBRY_COM="https://api.lbry.com"
+VERSION='2.3.0'
 
 
-format_bold='\033[1m'
-format_reset='\033[m'
-format_red='\033[38;5;1m'
-format_green='\033[38;5;2m'
-format_yellow='\033[38;5;3m'
-format_blue='\033[38;5;4m'
-format_magenta='\033[38;5;5m'
-format_cyan='\033[38;5;6m'
-format_black_bright='\033[38;5;8m'
-tab='	'
+FORMAT_BOLD='\033[1m'
+FORMAT_RESET='\033[m'
+FORMAT_RED='\033[38;5;1m'
+FORMAT_GREEN='\033[38;5;2m'
+FORMAT_YELLOW='\033[38;5;3m'
+FORMAT_BLUE='\033[38;5;4m'
+FORMAT_MAGENTA='\033[38;5;5m'
+FORMAT_CYAN='\033[38;5;6m'
+FORMAT_BLACK_BRIGHT='\033[38;5;8m'
+TAB='	'
 
 
-mkdir -p "$config_dir"
+mkdir -p "$CONFIG_DIR"
 
-if [ ! -f "$config_dir/mimetypes" ]; then
-	cat << EOF > "$config_dir/mimetypes"
+if [ ! -f "$CONFIG_DIR/mimetypes" ]; then
+	cat << EOF > "$CONFIG_DIR/mimetypes"
 # This file determines rules for opening different types of files using "lbt open".
 # Rules are ordered by priority, the ones at the top have the highest priority.
 
@@ -33,12 +34,12 @@ if [ ! -f "$config_dir/mimetypes" ]; then
 #    "stream" means that the program can open the file as an HTTP stream.
 # Anything after the second column is ignored.
 
-video/*		stream
-audio/*		stream
-image/*		save
-text/html	stream
-application/pdf	save
-*		save
+video/*         stream
+audio/*         stream
+image/*         save
+text/html       stream
+application/pdf save
+*               save
 EOF
 
 fi
@@ -48,14 +49,15 @@ fi
 config_default_custom_open_command='run-mailcap --action-view "$mimetype:$1"'
 config_default_remote_lbrynet_url_http='localhost:5279'
 
-if [ ! -f "$config_dir/config.json" ]; then
-	cat << EOF > "$config_dir/config.json"
+if [ ! -f "$CONFIG_DIR/config.json" ]; then
+	cat << EOF > "$CONFIG_DIR/config.json"
 {
 	"use_xdg_open": true,
 	"custom_open_command": "$config_default_custom_open_command",
 	"use_local_lbrynet": true,
 	"autostart_local_lbrynet": true,
-	"remote_lbrynet_url_http": "$config_default_remote_lbrynet_url_http"
+	"remote_lbrynet_url_http": "$config_default_remote_lbrynet_url_http",
+	"cache_local_lbrynet_settings": true
 }
 EOF
 
@@ -185,42 +187,26 @@ lbrynet_check_error() {
 			#If starts with {. assume valid JSON
 			case "$1" in
 				*'"error": '* )
-					print_error "Error in LBRY daemon:"
+					print_error "Error:"
 					print_error "$(result_value "$1" 'error')"
 					exit 1
 					;;
 			esac
 			;;
 		* )
-			print_error "Error."
-			print_error "$1"
+			printf_error "Error: '%s'" "$1"
 			exit 1
 			;;
 	esac
 }
 
-lbrynet_start_if_needed() {
-	printf_info "Checking LBRY daemon status... "
-	if ! pidof "lbrynet" > /dev/null; then
-		if lbt_config_bool 'autostart_local_lbrynet' true; then
-			if ! command -v "lbrynet" > /dev/null; then
-				#shellcheck disable=SC2016
-				print_error 'Unable to find "lbrynet" executable in $PATH'
-				print_error "If you've installed LBRY on this system, see"
-				print_error "https://lbry.com/faq/how-to-cli for where to find lbrynet."
-				return 1
-			fi
-			lbrynet_starting=y
-			printf_info "\nNot started. Starting LBRY daemon, this may take a while"
-			lbrynet start 2> /dev/null > /dev/null &
-			sleep 2
-		else
-			print_error "\nError: lbrynet is not running."
-			return 1
-		fi
-	fi
+lbrynet_wait_full_start() {
 	displayed_startup_count=0
 	while true; do
+		if ! pidof "lbrynet" > /dev/null; then
+			printf_error "\nError: LBRY daemon process is not running.\n"
+			exit 1
+		fi
 		set +o errexit
 		result_pair="$(lbrynet status | jq -r '
 			( .is_running | tostring ) + " " +
@@ -234,15 +220,6 @@ lbrynet_start_if_needed() {
 		if [ "$is_running" != true ] && [ "$is_running" != false ]; then
 			is_running=false
 			startup_count=0
-		fi
-
-		if [ -z "$lbrynet_starting" ]; then
-			if [ "$is_running" = true ]; then
-				print_info "Ready."
-				return 0
-			fi
-			printf_info "\nLBRY daemon is starting, this may take a while"
-			lbrynet_starting=y
 		fi
 
 		while [ "$displayed_startup_count" -lt "$startup_count" ]; do
@@ -259,6 +236,27 @@ lbrynet_start_if_needed() {
 	done
 }
 
+lbrynet_quick_start_check() {
+	if ! pidof "lbrynet" > /dev/null; then
+		if lbt_config_bool 'autostart_local_lbrynet' true; then
+			if ! command -v "lbrynet" > /dev/null; then
+				#shellcheck disable=SC2016
+				print_error 'Unable to find "lbrynet" executable in $PATH'
+				print_error "If you've installed LBRY on this system, see"
+				print_error "https://lbry.com/faq/how-to-cli for where to find lbrynet."
+				return 1
+			fi
+			printf_info "Starting LBRY daemon, please wait"
+			lbrynet start 2> /dev/null > /dev/null &
+			lbrynet_wait_full_start
+			sleep 2
+		else
+			print_error "Error: lbrynet is not running."
+			return 1
+		fi
+	fi
+}
+
 
 lbt_config_string() {
 	(printf '%s' "$lbt_config" | jq ".$1" --raw-output --exit-status) || printf '%s' "$2"
@@ -273,15 +271,30 @@ lbt_config_bool() {
 }
 
 init_lbt_config() {
-	lbt_config=$(cat "$config_dir/config.json")
+	lbt_config=$(cat "$CONFIG_DIR/config.json")
 
 	if lbt_config_bool 'use_local_lbrynet' true; then
 		lbrynet_local=y
 
-		lbrynet_start_if_needed
+		lbrynet_quick_start_check
 
-		lbrynet_config=$(lbrynet settings get)
+		if [ -f "$CACHE_DIR/local_lbrynet_settings.json" ]; then
+			lbrynet_config="$(cat "$CACHE_DIR/local_lbrynet_settings.json")"
+		else
+			lbrynet_config=$(lbrynet settings get)
+		fi
+		if ! api_validate_and_check_running "$lbrynet_config"; then
+			printf_info "LBRY daemon not fully started. Please wait"
+			lbrynet_wait_full_start
+
+			init_lbt_config
+			return
+		fi
 		lbrynet_check_error "$lbrynet_config"
+		if lbt_config_bool 'cache_local_lbrynet_settings' true; then
+			mkdir -p "$CACHE_DIR"
+			printf '%s' "$lbrynet_config" > "$CACHE_DIR/local_lbrynet_settings.json"
+		fi
 		api_server=$(json_value "$lbrynet_config" "api")
 	else
 		api_server=$(lbt_config_string 'remote_lbrynet_url_http' "$config_default_remote_lbrynet_url_http")
@@ -290,15 +303,52 @@ init_lbt_config() {
 
 api_call() {
 	if [ -n "$2" ]; then
-		curl --silent --show-error "$api_server" -d'{
+		result="$(curl --silent --show-error "$api_server" -d'{
 			"method": "'"$1"'",
 			"params": '"$2"'
-		}'
+		}')"
 	else
-		curl --silent --show-error "$api_server" -d'{ 
+		result="$(curl --silent --show-error "$api_server" -d'{ 
 			"method": "'"$1"'" 
-		}'
+		}')"
 	fi
+
+	if ! api_validate_and_check_running "$result"; then
+		printf_info "LBRY daemon not fully started. Please wait"
+		lbrynet_wait_full_start
+		api_call "$1" "$2"
+		return
+	fi
+	
+	printf '%s' "$result"
+}
+
+api_validate_and_check_running() {
+	case "$1" in
+		# Quick heuristic...
+		\{*'"name": "ComponentsNotStartedError"'* )
+			# ...but double check syntax
+			if printf '%s' "$result" | jq -e '.error.data.name == "ComponentsNotStartedError"' > /dev/null; then
+				return 1
+			fi
+			;;
+		"Could not connect to daemon"* )
+			if lbt_config_bool 'use_local_lbrynet' true && lbt_config_bool 'autostart_local_lbrynet' true; then
+				return 1
+			else
+				print_error "$1"
+				exit 1
+			fi
+			;;
+		# If starts with {, assume it's valid JSON, not gonna call jq
+		\{* )
+			return 0
+			;;
+		* )
+			printf_error "API error: '%s'" "$1"
+			exit 1
+			;;
+	esac
 }
 
 lbrynet_resolve() {
@@ -378,6 +428,11 @@ printf_info() {
 	fi
 }
 
+printf_error() {
+	# shellcheck disable=SC2059
+	>&2 printf "$@"
+}
+
 
 # shellcheck disable=SC1091
 . gettext.sh
@@ -398,7 +453,7 @@ check_incompatible() {
 
 get_lbry_url_from_youtube() {
 	printf_info "%s: querying LBRY x YouTube Sync service... " "$1"
-	lbry_url="$(curl "$api_lbry_com/yt/resolve?video_ids=$1" --max-time 10 --silent --show-error | jq ".data.videos[\"$1\"]" --raw-output)"
+	lbry_url="$(curl "$API_LBRY_COM/yt/resolve?video_ids=$1" --max-time 10 --silent --show-error | jq ".data.videos[\"$1\"]" --raw-output)"
 	if [ "$lbry_url" = "null" ] || [ -z "$lbry_url" ]; then
 		print_error "LBRY video for $1 not found."
 		exit 1
@@ -541,7 +596,7 @@ handle_lbry_url() {
 
 			# shellcheck disable=SC2254
 			case "$2" in
-				$mimetype_pattern) 
+				$mimetype_pattern ) 
 					do_mimetype_action "$line" "$2" "$3"
 					exit 0
 					;;
@@ -654,7 +709,7 @@ lbt_open() {
 		exit 0
 	fi
 
-	handle_lbry_url "$config_dir/mimetypes" "$mimetype" "$url"
+	handle_lbry_url "$CONFIG_DIR/mimetypes" "$mimetype" "$url"
 }
 
 
@@ -1100,7 +1155,6 @@ lbt_ls() {
 
 
 	check_incompatible "$ls_files" "$ls_not_files" "--files" "--not-files"
-	check_incompatible "$ls_no_name" "$ls_no_path" "--no-name" "--no-path"
 	
 
 	if [ -n "$help" ]; then
@@ -1243,14 +1297,16 @@ lbt_ls_do() {
 				#claim ID
 				\"i\"* )
 					if [ "$ls_color" = y ]; then
-						printf "$format_black_bright"
+						#shellcheck disable=SC2059
+						printf "$FORMAT_BLACK_BRIGHT"
 					fi
 					printf '%s' "$(lbt_ls_trim_json_value "$line")"
 					;;
 				#added on datetime
 				\"a\"* )
 					if [ "$ls_color" = y ]; then
-						printf "$format_blue"
+						#shellcheck disable=SC2059
+						printf "$FORMAT_BLUE"
 					fi
 					printf '%s' "$line"
 					;;
@@ -1290,18 +1346,21 @@ lbt_ls_do() {
 						# in the correct order
 						printf '3'
 						if [ "$ls_color" = y ]; then
-							printf "$format_green"
+							#shellcheck disable=SC2059
+							printf "$FORMAT_GREEN"
 						fi
 					elif [ -n "$is_empty" ]; then
 						printf '1'
 						if [ "$ls_color" = y ]; then
-							printf "$format_red"
+							#shellcheck disable=SC2059
+							printf "$FORMAT_RED"
 						fi
 						printf '!'
 					else
 						printf '2'
 						if [ "$ls_color" = y ]; then
-							printf "$format_yellow"
+							#shellcheck disable=SC2059
+							printf "$FORMAT_YELLOW"
 						fi
 						printf '<'
 					fi
@@ -1314,7 +1373,8 @@ lbt_ls_do() {
 				\"m\"* )
 					mime_type="$(lbt_ls_trim_json_value "$line")"
 					if [ "$ls_color" = y ]; then
-						printf "$format_magenta"
+						#shellcheck disable=SC2059
+						printf "$FORMAT_MAGENTA"
 					fi
 					printf '%s' "$mime_type"
 					;;
@@ -1327,11 +1387,14 @@ lbt_ls_do() {
 				\"t\"* )
 					if [ "$ls_color" = y ]; then
 						if [ -n "$is_full" ]; then
-							printf "$format_green"
+							#shellcheck disable=SC2059
+							printf "$FORMAT_GREEN"
 						elif [ -n "$is_empty" ]; then
-							printf "$format_red"
+							#shellcheck disable=SC2059
+							printf "$FORMAT_RED"
 						else
-							printf "$format_yellow"
+							#shellcheck disable=SC2059
+							printf "$FORMAT_YELLOW"
 						fi
 					fi
 
@@ -1343,7 +1406,7 @@ lbt_ls_do() {
 				\"c\"* )
 					channel_name="$(lbt_ls_trim_json_value "$line")"
 					if [ "$ls_color" = y ]; then
-						printf "${format_cyan}${format_bold}%s${format_reset}" "$channel_name" 
+						printf "${FORMAT_CYAN}${FORMAT_BOLD}%s${FORMAT_RESET}" "$channel_name" 
 					else
 						printf '%s' "$channel_name"
 					fi
@@ -1353,13 +1416,16 @@ lbt_ls_do() {
 					claim_name="$(lbt_ls_trim_json_value "$line")"
 					if [ "$ls_color" = y ]; then
 						if [ -n "$is_full" ]; then
-							printf "$format_green"
+							#shellcheck disable=SC2059
+							printf "$FORMAT_GREEN"
 						elif [ -n "$is_empty" ]; then
-							printf "$format_red"
+							#shellcheck disable=SC2059
+							printf "$FORMAT_RED"
 						else
-							printf "$format_yellow"
+							#shellcheck disable=SC2059
+							printf "$FORMAT_YELLOW"
 						fi
-						printf "${format_bold}%s${format_reset}" "$claim_name"
+						printf "${FORMAT_BOLD}%s${FORMAT_RESET}" "$claim_name"
 					else
 						printf '%s' "$claim_name"
 					fi
@@ -1372,7 +1438,8 @@ lbt_ls_do() {
 					;;
 				\"p\"* )
 					if [ "$ls_color" = y ]; then
-						printf "$format_reset"
+						#shellcheck disable=SC2059
+						printf "$FORMAT_RESET"
 					fi
 					if [ -n "$ls_not_files" ]; then
 						passes_filters=n
@@ -1390,7 +1457,7 @@ lbt_ls_do() {
 		total_pages="$(result_value "$list_info" "total_pages")"
 		page=$((page+1))
 	done \
-	| sed -E 's/"\w": //g; s/'"$tab"'$//' \
+	| sed -E 's/"\w": //g; s/'"$TAB"'$//' \
 	| if [ "$ls_sort" = 'size' ]; then
 		if [ -n "$ls_reverse" ]; then
 			sort --reverse --numeric-sort --key="$size_column" --key="$((size_column + 1))"
@@ -1405,13 +1472,13 @@ lbt_ls_do() {
 			'BEGIN { FS = "\t"; OFS = "\t" } \
 			{ sub(/./, "", $'"$size_column"'); print }' \
 		| if [ "$ls_human" = y ]; then
-			numfmt --to=iec-i --field=$((size_column + 1)) --delimiter="$tab"
+			numfmt --to=iec-i --field=$((size_column + 1)) --delimiter="$TAB"
 		else
 			tee
 		fi \
-		| sed 's/'"$tab"'//'"$size_column"
+		| sed 's/'"$TAB"'//'"$size_column"
 	# elif [ -n "$ls_no_size" ] && [ "$ls_sort" = 'size' ]; then
-	# 	sed 's/[^'"$tab"']*'"$tab"'//'"$size_column"'; s/[^'"$tab"']*'"$tab"'//'"$size_column"
+	# 	sed 's/[^'"$TAB"']*'"$TAB"'//'"$size_column"'; s/[^'"$TAB"']*'"$TAB"'//'"$size_column"
 	else
 		tee
 	fi \
@@ -1461,7 +1528,8 @@ lbt_ls_do() {
 		tee
 	fi \
 	| if [ -n "$sort_params" ]; then
-		sort -t "$tab" $sort_params
+		#shellcheck disable=SC2086
+		sort -t "$TAB" $sort_params
 	else
 		if [ -n "$ls_reverse" ]; then
 			tac
@@ -1470,15 +1538,15 @@ lbt_ls_do() {
 		fi
 	fi \
 	| if [ "$ls_sort" = 'mime' ] && [ -z "$ls_mime_type" ]; then
-		sed "s/[^$tab]*$tab//$mime_column"
+		sed "s/[^$TAB]*$TAB//$mime_column"
 	elif [ "$ls_sort" = 'size' ] && [ -n "$ls_no_size" ]; then
-		sed "s/[^$tab]*$tab//$size_column"
+		sed "s/[^$TAB]*$TAB//$size_column"
 	else
 		tee
 	fi \
-	| sed "/DELETE$/d; s/${tab}KEEP$//" \
+	| sed "/DELETE$/d; s/${TAB}KEEP$//" \
 	| if [ "$ls_table" = y ]; then
-		column --table --separator="$tab" #--table-truncate "$name_column"
+		column --table --separator="$TAB" #--table-truncate "$name_column"
 	else
 		tee
 	fi
@@ -1499,7 +1567,7 @@ lbt_rm_file() {
 			;;
 	esac
 	if [ -n "$rm_color" ]; then
-		printf_info "${format_cyan}%s${format_reset} - deleting file... " "$url"
+		printf_info "${FORMAT_CYAN}%s${FORMAT_RESET} - deleting file... " "$url"
 	else
 		printf_info '%s - deleting file... ' "$url"
 	fi
@@ -1538,7 +1606,7 @@ lbt_rm_lbrynet() {
 		action_string='deleting blobs...'
 	fi
 	if [ -n "$rm_color" ]; then
-		printf_info "${format_cyan}%s${format_reset} - %s " "$url" "$action_string"
+		printf_info "${FORMAT_CYAN}%s${FORMAT_RESET} - %s " "$url" "$action_string"
 	else
 		printf_info '%s - %s ' "$url" "$action_string"
 	fi
@@ -1732,16 +1800,16 @@ lbt_feed() {
 	if [ -n "$1" ]; then
 		input_channels="$*"
 	else
-		if [ ! -e "$config_dir/feeds" ]; then
+		if [ ! -e "$CONFIG_DIR/feeds" ]; then
 			if [ -t 0 ]; then
-				print_info "Note: missing file $config_dir/feeds"
+				print_info "Note: missing file $CONFIG_DIR/feeds"
 				print_info "and no channels are provided in arguments."
 				print_info
 				print_info "Enter channels here: (Ctrl+D to finish)"
 			fi
 			input_channels="$(tee)"
 		else
-			input_channels="$(cat "$config_dir/feeds")"
+			input_channels="$(cat "$CONFIG_DIR/feeds")"
 		fi
 	fi 
 	for channel in $input_channels; do
@@ -1896,7 +1964,7 @@ lbt_help_generic() {
 
 lbt_version() {
 	if [ -t 1 ] && [ -z "$NO_COLOR" ]; then
-		printf "${format_bold}lbt %s${format_reset}\n" "$VERSION"
+		printf "${FORMAT_BOLD}lbt %s${FORMAT_RESET}\n" "$VERSION"
 	else
 		echo "lbt $VERSION"
 	fi
