@@ -17,6 +17,7 @@ format_blue='\033[38;5;4m'
 format_magenta='\033[38;5;5m'
 format_cyan='\033[38;5;6m'
 format_black_bright='\033[38;5;8m'
+tab='	'
 
 
 mkdir -p "$config_dir"
@@ -67,40 +68,41 @@ lbt_help_open() {
 "Usage: lbt open URL [options...]
    or  lbt open #CLAIM_ID [options...]
 
-	-f, --save-file 	Save content as a file even if it can be streamed
-	-h, --help 		Print help
-	-m, --get-mime 		Get MIME type of the LBRY content and exit
-	-q, --quiet 		Don't output extra information, besides error messages
-	-s, --force-stream 	Use HTTP stream even if the file is saved on this machine"
+	-f, --save-file     Save content as a file even if it can be streamed
+	-h, --help          Print help
+	-m, --get-mime      Get MIME type of the LBRY content and exit
+	-q, --quiet         Don't output extra information, besides error messages
+	-s, --force-stream  Use HTTP stream even if the file is saved on this machine"
 }
 
 lbt_help_ls() {
 	echo \
 "Usage: lbt ls [options...]
 
-	-b, --blobs			List downloaded and total blobs
-	-c, --channel			List channel name
-	    --color WHEN 		Output result with color (always,auto,never)
-	-d, --full			Only list content that's fully downloaded
-	-e, --empty			Only list content which has no downloaded blobs
-	-f, --files			Only list content that's saved as a local file
-	-F, --not-files			Only list content that's not saved as a local file
-	    --full-time 		Output time as full time and date
-	-h, --human-readable WHEN 	Output size in human readable units (always,auto,never)
-	    --help			Print help
-	-i, --claim-id 			List claim ID
-	-l, --pretty WHEN 		Synonym for --color --human-readable --table
-	-m, --mime			List MIME type
-	-n, --no-path			Don't list file paths
-	-N, --no-name			Don't list claim names
-	-P, --absolute-path		List absolute paths instead of relative
-	-R, --relative-path		List relative paths, even when piping output
-	-r, --reverse 			Reverse order when sorting
-	-s, --no-size			Don't list total of the file
-	    --sort KEY 			Sort values by key (name,channel,size,mime,time,claim-id)
-	-t, --no-time 			Don't list time of first access
-	-T, --table WHEN 		Output result as a table (always,auto,never)
-	    --unix-time 		Output time as UNIX timestamp (seconds since Jan 1, 1970)"
+	-b, --blobs                List downloaded and total blobs
+	-c, --channel              List channel name
+	    --color WHEN           Output result with color (always,auto,never)
+	-d, --full                 Only list content that's fully downloaded
+	-e, --empty                Only list content which has no downloaded blobs
+	-f, --files                Only list content that's saved as a local file
+	-F, --not-files            Only list content that's not saved as a local file
+	    --full-time            Output time as full time and date
+	-h, --human-readable WHEN  Output size in human readable units (always,auto,never)
+	    --help                 Print help
+	-i, --claim-id             List claim ID
+	-l, --pretty WHEN          Synonym for --color --human-readable --table
+	-m, --mime                 List MIME type
+	-n, --no-path              Don't list file paths
+	-N, --no-name              Don't list claim names
+	-P, --absolute-path        List absolute paths instead of relative
+	-q, --quiet                Don't output extra information, besides error messages
+	-R, --relative-path        List relative paths, even when piping output
+	-r, --reverse              Reverse order when sorting
+	-s, --no-size              Don't list total of the file
+	    --sort KEY             Sort values by key (name,channel,size,mime,time,claim-id)
+	-t, --no-time              Don't list time of first access
+	-T, --table WHEN           Output result as a table (always,auto,never)
+	    --unix-time            Output time as UNIX timestamp (seconds since Jan 1, 1970)"
 }
 
 lbt_help_get() {
@@ -108,14 +110,14 @@ lbt_help_get() {
 "Usage: lbt get URL [options...]
    or  lbt get #CLAIM_ID [options...]
 
-	-f, --file		(When used with --resolve) Save content as a file and print download path
-	-F, --force-save 	Save content as a file even if that's not needed
-	-h, --help		Print help
-	-O, --output FILE 	Write output to FILE (or, if the content already exists on the local machine, create a sym-link)
-	-q, --quiet 		Don't output extra information, besides error messages
-	-r, --resolve		Instead of printing file to stdout, print canonical LBRY URL
-	-s, --stream		(When used with --resolve) Create HTTP stream and print its URL
-	-t, --terminal		Enable printing output to the terminal"
+	-f, --file         (When used with --resolve) Save content as a file and print download path
+	-F, --force-save   Save content as a file even if that's not needed
+	-h, --help         Print help
+	-O, --output FILE  Write output to FILE (or, if the content already exists on the local machine, create a sym-link)
+	-q, --quiet        Don't output extra information, besides error messages
+	-r, --resolve      Instead of printing file to stdout, print canonical LBRY URL
+	-s, --stream       (When used with --resolve) Create HTTP stream and print its URL
+	-t, --terminal     Enable printing output to the terminal"
 }
 
 lbt_help_feed() {
@@ -123,13 +125,13 @@ lbt_help_feed() {
 "Usage: lbt feed [options...]
    or  lbt feed CHANNELs... [optons...]
 
-	-c, --color WHEN 	Output result with color (always,auto,never)
-	-h, --help 		Print help
-	-n, --pages N		Show N pages worth of content instead of 1
-	-p, --start-page N 	Show content starting from Nth page
-	-s, --sfeed 		Output feed in sfeed format
-	-S, --plain 		Output feed in sfeed_plain format
-	-t, --time 		Always show release date and time"
+	-c, --color WHEN    Output result with color (always,auto,never)
+	-h, --help          Print help
+	-n, --pages N       Show N pages worth of content instead of 1
+	-p, --start-page N  Show content starting from Nth page
+	-s, --sfeed         Output feed in sfeed format
+	-S, --plain         Output feed in sfeed_plain format
+	-t, --time          Always show release date and time"
 }
 
 lbt_help_rm() {
@@ -137,49 +139,12 @@ lbt_help_rm() {
 "Usage: lbt rm URLs... [options...]
    or  lbt rm #CLAIM_IDs... [optons...]
 
-	-c, --color WHEN 	Output information with color (always,auto,never)
-	-f, --file 		If content was saved as a file in the downloads directory, delete it
-	-h, --help	 	Print help
-	-n, --no-blobs 		Don't remove stored blobs (requires --file)
-	-q, --quiet 		Don't output extra information, besides error messages"
+	-c, --color WHEN  Output information with color (always,auto,never)
+	-f, --file        If content was saved as a file in the downloads directory, delete it
+	-h, --help        Print help
+	-n, --no-blobs    Don't remove stored blobs (requires --file)
+	-q, --quiet       Don't output extra information, besides error messages"
 }
-
-# from dylanaraps' Pure Sh Bible, MIT License
-trim_quotes() {
-
-	# Disable globbing.
-	# This makes the word-splitting below safe.
-	set -f
-
-	# Store the current value of 'IFS' so we
-	# can restore it later.
-	old_ifs=$IFS
-
-	# Set 'IFS' to ["'].
-	IFS=\"\'
-
-	# Create an argument list, splitting the
-	# string at ["'].
-	#
-	# Disable this shellcheck error as it only
-	# warns about word-splitting which we expect.
-	# shellcheck disable=2086
-	set -- $1
-
-	# Set 'IFS' to blank to remove spaces left
-	# by the removal of ["'].
-	IFS=
-
-	# Print the quote-less string.
-	printf '%s' "$*"
-
-	# Restore the value of 'IFS'.
-	IFS=$old_ifs
-
-	# Re-enable globbing.
-	set +f
-}
-
 
 
 json_value() {
@@ -235,6 +200,7 @@ lbrynet_check_error() {
 }
 
 lbrynet_start_if_needed() {
+	printf_info "Checking LBRY daemon status... "
 	if ! pidof "lbrynet" > /dev/null; then
 		if lbt_config_bool 'autostart_local_lbrynet' true; then
 			if ! command -v "lbrynet" > /dev/null; then
@@ -245,11 +211,11 @@ lbrynet_start_if_needed() {
 				return 1
 			fi
 			lbrynet_starting=y
-			printf_info "Starting LBRY daemon, this may take a while"
+			printf_info "\nNot started. Starting LBRY daemon, this may take a while"
 			lbrynet start 2> /dev/null > /dev/null &
 			sleep 2
 		else
-			print_error "Error: lbrynet is not running."
+			print_error "\nError: lbrynet is not running."
 			return 1
 		fi
 	fi
@@ -272,9 +238,10 @@ lbrynet_start_if_needed() {
 
 		if [ -z "$lbrynet_starting" ]; then
 			if [ "$is_running" = true ]; then
+				print_info "Ready."
 				return 0
 			fi
-			printf_info "LBRY daemon is starting, this may take a while"
+			printf_info "\nLBRY daemon is starting, this may take a while"
 			lbrynet_starting=y
 		fi
 
@@ -881,364 +848,9 @@ lbt_get() {
 	fi
 }
 
-
-lbrynet_list_files() {
-	page=1
-	total_pages=1
-
-	# Setting up filters for jq
-
-	# Download path must always be requested, so that we can later filter out
-	# --files or --not-files claims
-	columns="p: .download_path"
-	total_columns=1
-	if [ -n "$ls_claim_id" ]; then
-		columns="i: .claim_id, $columns"
-		claim_id_column=1
-		total_columns=$((total_columns + 1))
-	fi
-	if [ -n "$ls_mime_type" ]; then
-		columns="m: .mime_type, $columns"
-		mime_column=1
-		claim_id_column=$((claim_id_column + 1))
-		total_columns=$((total_columns + 1))
-	fi
-	if [ -z "$ls_no_name" ]; then
-		columns="n: .claim_name, $columns"
-		mime_column=$((mime_column + 1))
-		claim_id_column=$((claim_id_column + 1))
-		total_columns=$((total_columns + 1))
-	fi
-	if [ -z "$ls_no_time" ]; then
-		columns="a: .added_on, $columns"
-		time_column=1
-		mime_column=$((mime_column + 1))
-		claim_id_column=$((claim_id_column + 1))
-		total_columns=$((total_columns + 1))
-	fi
-	if [ -z "$ls_no_size" ]; then
-		columns="s: .total_bytes, $columns"
-		size_column=1
-		time_column=$((time_column + 1))
-		mime_column=$((mime_column + 1))
-		claim_id_column=$((claim_id_column + 1))
-		total_columns=$((total_columns + 1))
-	fi
-	if [ -n "$ls_channel" ]; then
-		columns="c: .channel_name, $columns"
-		size_column=$((size_column + 1))
-		time_column=$((time_column + 1))
-		mime_column=$((mime_column + 1))
-		claim_id_column=$((claim_id_column + 1))
-		total_columns=$((total_columns + 1))
-	fi
-	if [ -n "$ls_blobs" ]; then
-		columns="b: .blobs_completed, t: .blobs_in_stream, $columns"
-		size_column=$((size_column + 1))
-		time_column=$((time_column + 1))
-		mime_column=$((mime_column + 1))
-		claim_id_column=$((claim_id_column + 1))
-		total_columns=$((total_columns + 1))
-	fi
-
-	# In all of these cases, we need attributes like $is_full or $is_empty
-	if [ -n "$ls_color" ] || [ -z "$ls_no_size" ] || [ -n "$ls_full" ] \
-			|| [ -n "$ls_empty" ] || [ -n "$ls_not_empty" ]; then
-		columns="e: .blobs_completed, r: .blobs_remaining, $columns"
-	fi
-
-
-
-	#
-	# Here we will construct the final command for interpreting the JSON output
-	#
-
-	#no-op pipe, we will build a command on top of it
-	output_command="tee"
-
-	if [ -z "$ls_no_size" ]; then
-		if [ "$ls_sort" = "size" ]; then
-			if [ -n "$ls_reverse" ]; then
-				sort_params="--reverse"
-			fi
-			output_command="$output_command | sort $sort_params --field-separator='\"' --numeric-sort \
-				--key=$size_column --key=$((size_column + 1))"
-		fi
-
-		output_command="$output_command | awk \
-			'BEGIN { FS = \"\\\"\"; OFS = \"\\\"\" } \
-			{ sub(/./, \"\", \$$size_column); print }'"
-
-		if [ "$ls_human" = y ]; then
-			output_command="$output_command | sed 's/\"/!!TEMP!!\"/$size_column' \
-				| numfmt --to=iec-i --field=$((size_column + 1)) --delimiter=\\\" --invalid=ignore \
-				| sed 's/!!TEMP!!\"//g'"
-		else
-			output_command="$output_command | sed 's/\"//$size_column'"
-		fi
-	fi
-
-	if [ -z "$ls_no_time" ]; then
-		if [ -n "$ls_full_time" ]; then
-			time_style_recent='%Y-%m-%d %H:%M:%S %z'
-			time_style_nonrecent="$time_style_recent"
-		elif [ -z "$ls_unix_time" ]; then
-			time_style_recent='%b %d %R'
-			time_style_nonrecent='%b %d %Y'
-		fi
-
-		if [ -z "$ls_unix_time" ]; then
-			# Set TIME to the content of time_column, without color codes
-			# Replace TIME in time_column with a formatted time string
-			output_command="$output_command | awk \
-				'BEGIN { FS = \"\\\"\"; OFS = \"\\\"\" } { \
-				\
-					TIME = \$$time_column; \
-					CUR_TIME = systime(); \
-				\
-					sub(/\\033\[38;5;\\Sm/,\"\",TIME); \
-				\
-					if (strftime(\"%Y\", TIME) == strftime(\"%Y\", CUR_TIME)) \
-						FORMAT = \"$time_style_recent\"; \
-					else \
-						FORMAT = \"$time_style_nonrecent\"; \
-				\
-					sub(TIME, strftime(FORMAT, TIME), \$$time_column); \
-					print \
-				}'"
-		fi
-	fi
-
-	if [ -n "$ls_claim_id" ]; then
-		#print_error "$claim_id_column"
-		output_command="$output_command | awk \
-			'BEGIN { FS = \"\\\"\"; OFS = \"\\\"\" } { \
-			\
-				if (index(\$$claim_id_column, \"m\") > 0) \
-					START_CHAR = 9; \
-				else \
-					START_CHAR = 0; \
-			\
-				\$$claim_id_column = substr(\$$claim_id_column, 0, 0 + START_CHAR) \"#\" substr(\$$claim_id_column, START_CHAR + 1); \
-				print \
-			}'"
-	fi
-
-	if [ -n "$ls_mime_type" ] && [ "$ls_sort" = "mime" ]; then
-		if [ -n "$ls_reverse" ]; then
-			sort_params="--reverse"
-		fi
-		output_command="$output_command | sort $sort_params --field-separator='\"' --key=$mime_column"
-	fi
-
-	if [ -n "$ls_reverse" ]; then
-		# "size" and "mime" sort reversal is handled separately
-		if [ "$ls_sort" != "size" ] && [ "$ls_sort" != "mime" ]; then
-			output_command="$output_command | tac"
-		fi
-	fi
-
-	if [ "$ls_table" = y ]; then
-		output_command="$output_command | column --table --separator=\\\""
-	else
-		output_command="$output_command | sed s/\\\"/\\\t/g"
-	fi
-
-	#
-	# $output_command constructed
-	#
-
-	case "$ls_sort" in
-		claim_id )
-			list_params=', "sort": "claim_id"'
-			;;
-		name )
-			list_params=', "sort": "claim_name"'
-			;;
-		channel )
-			list_params=', "sort": "channel_name"'
-			;;
-		time )
-			list_params=', "sort": "added_on"'
-			;;
-		# sorting by size, MIME type, etc. is handled separately
-	esac
-
-	while [ "$page" -le "$total_pages" ]; do
-		list_info="$(api_call file_list '{
-			"page": '"$page"', 
-			"page_size": 100'"$list_params"'
-		}')"
-		lbrynet_check_error "$list_info"
-
-
-		# Filter LBRY data using jq, output properties line by line
-		# Process them and combine them into one line
-		printf '%s' "$list_info" | jq ".result.items|.[]|{$columns}" | sed 's/,$//' | while read -r line; do
-			case "$line" in
-				\{ )
-					continue
-					;;
-				\} )
-					printf '\n'
-					continue
-					;;
-			esac
-			case "$line" in
-				#claim ID
-				\"i\"* )
-					if [ "$ls_color" = y ]; then
-						printf '%s' "$format_black_bright"
-					fi
-					printf '%s' "$line"
-					;;
-				#added on datetime
-				\"a\"* )
-					if [ "$ls_color" = y ]; then
-						printf '%s' "$format_blue"
-					fi
-					printf '%s' "$line"
-					;;
-				#blobs completed (for filtering, coloring etc)
-				"\"e\": 0" )
-					if [ -n "$ls_not_empty" ]; then
-						printf '""DELETE THIS""'
-					fi
-					is_empty=y
-					continue
-					;;
-				\"e\"* )
-					unset is_empty
-					if [ -n "$ls_empty" ]; then
-						printf '""DELETE THIS""'
-					fi
-					continue
-					;;
-				#blobs remaining (for filtering, coloring etc)
-				"\"r\": 0" )
-					is_full=y
-					continue
-					;;
-				\"r\"* )
-					unset is_full
-					if [ -n "$ls_full" ]; then
-						printf '""DELETE THIS""'
-					fi
-					continue
-					;;
-				#total bytes
-				\"s\"* )
-					if [ -n "$is_full" ]; then
-						# The numbers will be removed later,
-						# this is just so that the sort algorithm
-						# places empty, in-progress, and full files
-						# in the correct order
-						printf '3'
-						if [ "$ls_color" = y ]; then
-							printf '%s' "$format_green"
-						fi
-					elif [ -n "$is_empty" ]; then
-						printf '1'
-						if [ "$ls_color" = y ]; then
-							printf '%s' "$format_red"
-						fi
-						printf '!'
-					else
-						printf '2'
-						if [ "$ls_color" = y ]; then
-							printf '%s' "$format_yellow"
-						fi
-						printf '<'
-					fi
-					# Print color at the end of the previous column,
-					# as opposed to this column, so that
-					# numfmt doesn't have to deal with the escape codes.
-					printf ',\t%s' "$line"
-					;;
-				#MIME type
-				\"m\"* )
-					if [ "$ls_color" = y ]; then
-						printf '%s' "$format_magenta"
-					fi
-					printf '%s' "$line"
-					;;
-				#blobs completed
-				\"b\"* )
-					blobs_completed="$line"
-					continue
-					;;
-				#blobs total
-				\"t\"* )
-					if [ "$ls_color" = y ]; then
-						if [ -n "$is_full" ]; then
-							printf '%s' "$format_green"
-						elif [ -n "$is_empty" ]; then
-							printf '%s' "$format_red"
-						else
-							printf '%s' "$format_yellow"
-						fi
-					fi
-
-					printf '%s/%s' "$blobs_completed" "$line"
-					;;
-				#channel name
-				"\"c\": null" )
-					;;
-				\"c\"* )
-					if [ "$ls_color" = y ]; then
-						printf "${format_cyan}${format_bold}%s${format_reset}" "$line" 
-					else
-						printf '%s' "$line"
-					fi
-					;;
-				#claim name
-				\"n\"* )
-					if [ "$ls_color" = y ]; then
-						if [ -n "$is_full" ]; then
-							printf '%s' "$format_green"
-						elif [ -n "$is_empty" ]; then
-							printf '%s' "$format_red"
-						else
-							printf '%s' "$format_yellow"
-						fi
-						printf "${format_bold}%s${format_reset}" "$line"
-					else
-						printf '%s' "$line"
-					fi
-					;;
-				#download path
-				"\"p\": null")
-					if [ -n "$ls_files" ]; then
-						printf '""DELETE THIS""'
-					fi
-					;;
-				\"p\"* )
-					if [ "$ls_color" = y ]; then
-						printf '%s' "$format_reset"
-					fi
-					if [ -n "$ls_not_files" ]; then
-						printf '""DELETE THIS""'
-					elif [ -n "$ls_relative_path" ]; then
-						filename="$(printf '%s' "$line" | cut -d' ' -f2-)"
-						filename="$(trim_quotes "$filename")"
-						printf '%s' "$(realpath --relative-base="$PWD" "$filename")"
-					elif [ -n "$ls_path" ]; then
-						printf '%s' "$line"
-					fi
-					;;
-			esac
-			printf ',\t'
-		done 
-
-		total_pages="$(result_value "$list_info" "total_pages")"
-		page=$((page+1))
-	#Clean up our "temporary" JSON, separate fields with " characters
-	done | sed '/""DELETE THIS""/d; s/"\w": //g; s/"//g; s/,\t/"/g; s/"$//' | eval "$output_command"
-}
-
 lbt_ls() {
-	options=nNPcfFNbmdeERT::sh::rl::ti
-	longopts=help,no-path,absolute-path,channel,files,not-files,no-name,blobs,mime-type,full,empty,not-empty,color::,relative-path,table::,no-size,human-readable::,sort:,reverse,pretty::,no-time,claim-id,full-time,unix-time
+	options=nNPcfFNbmdeERT::sh::rl::tiq
+	longopts=help,no-path,absolute-path,channel,files,not-files,no-name,blobs,mime-type,full,empty,not-empty,color::,relative-path,table::,no-size,human-readable::,sort:,reverse,pretty::,no-time,claim-id,full-time,unix-time,quiet
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
 
@@ -1436,6 +1048,10 @@ lbt_ls() {
 				ls_channel=y
 				shift
 				;;
+			-q|--quiet)
+				quiet=y
+				shift
+				;;
 			-- )
 				shift
 				break
@@ -1485,21 +1101,6 @@ lbt_ls() {
 
 	check_incompatible "$ls_files" "$ls_not_files" "--files" "--not-files"
 	check_incompatible "$ls_no_name" "$ls_no_path" "--no-name" "--no-path"
-	if [ -n "$ls_no_name" ]; then
-		if [ -z "$ls_files" ]; then
-			print_error "Error: --no-name option requires --files"
-			exit 1
-		fi
-	fi
-
-
-	if [ "$ls_sort" = "mime" ] && [ -z "$ls_mime_type" ]; then
-		print_error "Error: --sort=mime requires --mime"
-		exit 1
-	elif [ "$ls_sort" = "size" ] && [ -n "$ls_no_size" ]; then
-		print_error "Error: --sort=size argument is incompatible with --no-size"
-		exit 1
-	fi
 	
 
 	if [ -n "$help" ]; then
@@ -1511,7 +1112,376 @@ lbt_ls() {
 	init_lbt_config
 
 
-	lbrynet_list_files
+	lbt_ls_do
+}
+
+lbt_ls_trim_json_value() {
+	value="${1#\"*\": \"}"
+	printf '%s' "${value%\"}"
+}
+
+lbt_ls_do() {
+	page=1
+	total_pages=1
+
+	# Setting up filters for jq
+
+	# Download path must always be requested, so that we can later filter out
+	# --files or --not-files claims
+	columns="p: .download_path"
+	total_columns=1
+	if [ -n "$ls_claim_id" ]; then
+		columns="i: .claim_id, $columns"
+		claim_id_column=1
+		total_columns=$((total_columns + 1))
+	fi
+	if [ -n "$ls_mime_type" ] || [ "$ls_sort" = 'mime' ]; then
+		columns="m: .mime_type, $columns"
+		mime_column=1
+		claim_id_column=$((claim_id_column + 1))
+		total_columns=$((total_columns + 1))
+	fi
+	if [ -z "$ls_no_name" ]; then
+		columns="n: .claim_name, $columns"
+		name_column=1
+		mime_column=$((mime_column + 1))
+		claim_id_column=$((claim_id_column + 1))
+		total_columns=$((total_columns + 1))
+	fi
+	if [ -z "$ls_no_time" ]; then
+		columns="a: .added_on, $columns"
+		time_column=1
+		name_column=$((name_column + 1))
+		mime_column=$((mime_column + 1))
+		claim_id_column=$((claim_id_column + 1))
+		total_columns=$((total_columns + 1))
+	fi
+	if [ -z "$ls_no_size" ] || [ "$ls_sort" = 'size' ]; then
+		columns="s: .total_bytes, $columns"
+		size_column=1
+		time_column=$((time_column + 1))
+		name_column=$((name_column + 1))
+		mime_column=$((mime_column + 1))
+		claim_id_column=$((claim_id_column + 1))
+		total_columns=$((total_columns + 1))
+	fi
+	if [ -n "$ls_channel" ]; then
+		columns="c: .channel_name, $columns"
+		size_column=$((size_column + 1))
+		time_column=$((time_column + 1))
+		name_column=$((name_column + 1))
+		mime_column=$((mime_column + 1))
+		claim_id_column=$((claim_id_column + 1))
+		total_columns=$((total_columns + 1))
+	fi
+	if [ -n "$ls_blobs" ]; then
+		columns="b: .blobs_completed, t: .blobs_in_stream, $columns"
+		size_column=$((size_column + 1))
+		time_column=$((time_column + 1))
+		name_column=$((name_column + 1))
+		mime_column=$((mime_column + 1))
+		claim_id_column=$((claim_id_column + 1))
+		total_columns=$((total_columns + 1))
+	fi
+
+	# In all of these cases, we need attributes like $is_full or $is_empty
+	if [ -n "$ls_color" ] || [ -z "$ls_no_size" ] || [ -n "$ls_full" ] \
+			|| [ -n "$ls_empty" ] || [ -n "$ls_not_empty" ]; then
+		columns="e: .blobs_completed, r: .blobs_remaining, $columns"
+	fi
+
+	case "$ls_sort" in
+		claim_id )
+			api_call_params=', "sort": "claim_id"'
+			;;
+		name )
+			api_call_params=', "sort": "claim_name"'
+			;;
+		channel )
+			api_call_params=', "sort": "channel_name"'
+			;;
+		time )
+			api_call_params=', "sort": "added_on"'
+			;;
+		# size ) # sort=size has special handling
+		# 	sort_params="--human-numeric-sort --key=$size_column --key=$((size_column + 1))"
+		# 	;;
+		mime )
+			sort_params="--key=$mime_column"
+			;;
+	esac
+	if [ -n "$sort_params" ] && [ -n "$ls_reverse" ]; then
+		sort_params="$sort_params --reverse"
+	fi
+
+	while [ "$page" -le "$total_pages" ]; do
+		list_info="$(api_call file_list '{
+			"page": '"$page"', 
+			"page_size": 100'"$api_call_params"'
+		}')"
+		lbrynet_check_error "$list_info"
+
+
+		# Filter LBRY data using jq, output properties line by line
+		# Process them and combine them into one line
+		printf '%s' "$list_info" | jq ".result.items|.[]|{$columns}" | sed 's/,$//' | while read -r line; do
+			case "$line" in
+				\{ )
+					passes_filters=y
+					continue
+					;;
+				\} )
+					if [ "$passes_filters" = y ]; then
+						printf '\tKEEP\n'
+					else
+						printf '\tDELETE\n'
+					fi
+					continue
+					;;
+			esac
+			case "$line" in
+				#claim ID
+				\"i\"* )
+					if [ "$ls_color" = y ]; then
+						printf "$format_black_bright"
+					fi
+					printf '%s' "$(lbt_ls_trim_json_value "$line")"
+					;;
+				#added on datetime
+				\"a\"* )
+					if [ "$ls_color" = y ]; then
+						printf "$format_blue"
+					fi
+					printf '%s' "$line"
+					;;
+				#blobs completed (for filtering, coloring etc)
+				"\"e\": 0" )
+					if [ -n "$ls_not_empty" ]; then
+						passes_filters=n
+					fi
+					is_empty=y
+					continue
+					;;
+				\"e\"* )
+					unset is_empty
+					if [ -n "$ls_empty" ]; then
+						passes_filters=n
+					fi
+					continue
+					;;
+				#blobs remaining (for filtering, coloring etc)
+				"\"r\": 0" )
+					is_full=y
+					continue
+					;;
+				\"r\"* )
+					unset is_full
+					if [ -n "$ls_full" ]; then
+						passes_filters=n
+					fi
+					continue
+					;;
+				#total bytes
+				\"s\"* )
+					if [ -n "$is_full" ]; then
+						# The numbers will be removed later,
+						# this is just so that the sort algorithm
+						# places empty, in-progress, and full files
+						# in the correct order
+						printf '3'
+						if [ "$ls_color" = y ]; then
+							printf "$format_green"
+						fi
+					elif [ -n "$is_empty" ]; then
+						printf '1'
+						if [ "$ls_color" = y ]; then
+							printf "$format_red"
+						fi
+						printf '!'
+					else
+						printf '2'
+						if [ "$ls_color" = y ]; then
+							printf "$format_yellow"
+						fi
+						printf '<'
+					fi
+					# Print color at the end of the previous column,
+					# as opposed to this column, so that
+					# numfmt doesn't have to deal with the escape codes.
+					printf '\t%s' "$line"
+					;;
+				#MIME type
+				\"m\"* )
+					mime_type="$(lbt_ls_trim_json_value "$line")"
+					if [ "$ls_color" = y ]; then
+						printf "$format_magenta"
+					fi
+					printf '%s' "$mime_type"
+					;;
+				#blobs completed
+				\"b\"* )
+					blobs_completed="$line"
+					continue
+					;;
+				#blobs total
+				\"t\"* )
+					if [ "$ls_color" = y ]; then
+						if [ -n "$is_full" ]; then
+							printf "$format_green"
+						elif [ -n "$is_empty" ]; then
+							printf "$format_red"
+						else
+							printf "$format_yellow"
+						fi
+					fi
+
+					printf '%s/%s' "$blobs_completed" "$line"
+					;;
+				#channel name
+				"\"c\": null" )
+					;;
+				\"c\"* )
+					channel_name="$(lbt_ls_trim_json_value "$line")"
+					if [ "$ls_color" = y ]; then
+						printf "${format_cyan}${format_bold}%s${format_reset}" "$channel_name" 
+					else
+						printf '%s' "$channel_name"
+					fi
+					;;
+				#claim name
+				\"n\"* )
+					claim_name="$(lbt_ls_trim_json_value "$line")"
+					if [ "$ls_color" = y ]; then
+						if [ -n "$is_full" ]; then
+							printf "$format_green"
+						elif [ -n "$is_empty" ]; then
+							printf "$format_red"
+						else
+							printf "$format_yellow"
+						fi
+						printf "${format_bold}%s${format_reset}" "$claim_name"
+					else
+						printf '%s' "$claim_name"
+					fi
+					;;
+				#download path
+				"\"p\": null")
+					if [ -n "$ls_files" ]; then
+						passes_filters=n
+					fi
+					;;
+				\"p\"* )
+					if [ "$ls_color" = y ]; then
+						printf "$format_reset"
+					fi
+					if [ -n "$ls_not_files" ]; then
+						passes_filters=n
+					elif [ -n "$ls_relative_path" ]; then
+						filename="$(lbt_ls_trim_json_value "$line")"
+						printf '%s' "$(realpath --relative-base="$PWD" "$filename")"
+					elif [ -n "$ls_path" ]; then
+						printf '%s' "$line"
+					fi
+					;;
+			esac
+			printf '\t'
+		done 
+
+		total_pages="$(result_value "$list_info" "total_pages")"
+		page=$((page+1))
+	done \
+	| sed -E 's/"\w": //g; s/'"$tab"'$//' \
+	| if [ "$ls_sort" = 'size' ]; then
+		if [ -n "$ls_reverse" ]; then
+			sort --reverse --numeric-sort --key="$size_column" --key="$((size_column + 1))"
+		else
+			sort --numeric-sort --key="$size_column" --key="$((size_column + 1))"
+		fi
+	else
+		tee
+	fi \
+	| if [ -z "$ls_no_size" ] || [ "$ls_sort" = 'size' ]; then
+		awk \
+			'BEGIN { FS = "\t"; OFS = "\t" } \
+			{ sub(/./, "", $'"$size_column"'); print }' \
+		| if [ "$ls_human" = y ]; then
+			numfmt --to=iec-i --field=$((size_column + 1)) --delimiter="$tab"
+		else
+			tee
+		fi \
+		| sed 's/'"$tab"'//'"$size_column"
+	# elif [ -n "$ls_no_size" ] && [ "$ls_sort" = 'size' ]; then
+	# 	sed 's/[^'"$tab"']*'"$tab"'//'"$size_column"'; s/[^'"$tab"']*'"$tab"'//'"$size_column"
+	else
+		tee
+	fi \
+	| if [ -z "$ls_no_time" ]; then
+		if [ -n "$ls_full_time" ]; then
+			time_style_recent='%Y-%m-%d %H:%M:%S %z'
+			time_style_nonrecent="$time_style_recent"
+		elif [ -z "$ls_unix_time" ]; then
+			time_style_recent='%b %d %R'
+			time_style_nonrecent='%b %d %Y'
+		fi
+
+		if [ -z "$ls_unix_time" ]; then
+			# Set TIME to the content of time_column, without color codes
+			# Replace TIME in time_column with a formatted time string
+			awk 'BEGIN { FS = "\t"; OFS = "\t" } {
+				TIME = $'"$time_column"';
+				CUR_TIME = systime();
+			
+				sub(/\033\[38;5;\Sm/, "", TIME);
+			
+				if (strftime("%Y", TIME) == strftime("%Y", CUR_TIME))
+					FORMAT = "'"$time_style_recent"'";
+				else
+					FORMAT = "'"$time_style_nonrecent"'";
+			
+				sub(TIME, strftime(FORMAT, TIME), $'"$time_column"');
+				print
+			}'
+		else
+			tee
+		fi
+	else
+		tee
+	fi \
+	| if [ -n "$ls_claim_id" ]; then
+		awk \
+			'BEGIN { FS = "\t"; OFS = "\t" } {
+				if (index($'"$claim_id_column"', "m") > 0)
+					START_CHAR = 9;
+				else
+					START_CHAR = 0;
+				$'"$claim_id_column"' = substr($'"$claim_id_column"', 0, START_CHAR) "#" substr($'"$claim_id_column"', START_CHAR + 1);
+				print
+			}'
+	else
+		tee
+	fi \
+	| if [ -n "$sort_params" ]; then
+		sort -t "$tab" $sort_params
+	else
+		if [ -n "$ls_reverse" ]; then
+			tac
+		else
+			tee
+		fi
+	fi \
+	| if [ "$ls_sort" = 'mime' ] && [ -z "$ls_mime_type" ]; then
+		sed "s/[^$tab]*$tab//$mime_column"
+	elif [ "$ls_sort" = 'size' ] && [ -n "$ls_no_size" ]; then
+		sed "s/[^$tab]*$tab//$size_column"
+	else
+		tee
+	fi \
+	| sed "/DELETE$/d; s/${tab}KEEP$//" \
+	| if [ "$ls_table" = y ]; then
+		column --table --separator="$tab" #--table-truncate "$name_column"
+	else
+		tee
+	fi
 }
 
 
