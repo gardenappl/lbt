@@ -147,7 +147,7 @@ Users of Arch and its derivatives can use the [AUR package](https://aur.archlinu
 
 ### Other systems
 
-Grab the latest version of `lbt` on the [Releases page](https://gitlab.com/gardenappl/lbt/-/releases). Extract the `lbt` file and put it into your PATH.
+Grab the latest version of `lbt` on the **[Releases page](https://gitlab.com/gardenappl/lbt/-/releases)**. Extract the `lbt` file and put it into your PATH.
 
 **Dependencies:**
 
