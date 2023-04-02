@@ -6,7 +6,7 @@ set -o errexit
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/lbt"
 API_LBRY_COM="https://api.lbry.com"
-VERSION='2.3.0'
+VERSION='2.3.1'
 
 
 FORMAT_BOLD='\033[1m'
@@ -181,21 +181,31 @@ read_line_vars() {
 }
 
 
-lbrynet_check_error() {
+lbrynet_validate() {
 	case "$1" in
 		\{* )
 			#If starts with {. assume valid JSON
 			case "$1" in
+				# Quick heuristic...
 				*'"error": '* )
-					print_error "Error:"
-					print_error "$(result_value "$1" 'error')"
-					exit 1
+					# ...but double check
+					if printf '%s' "$1" | jq -e '.result.error // .error' > /dev/null; then
+						print_error "Error:"
+						print_error "$(printf '%s' "$1" | jq '.result.error // .error')"
+						kill 0
+					elif printf '%s' "$1" | jq -e \
+						'.result | to_entries | .[] | select(.value.error)' > /dev/null; then
+
+						print_error "Error(s)":
+						print_error "$(printf '%s' "$1" | jq '.result | [ . | to_entries | .[] | select(.value.error) ] | from_entries')"
+						kill 0
+					fi
 					;;
 			esac
 			;;
 		* )
-			printf_error "Error: '%s'" "$1"
-			exit 1
+			printf_error "Unknown error: '%s'" "$1"
+			kill 0
 			;;
 	esac
 }
@@ -247,9 +257,12 @@ lbrynet_quick_start_check() {
 				return 1
 			fi
 			printf_info "Starting LBRY daemon, please wait"
-			lbrynet start 2> /dev/null > /dev/null &
+			setsid lbrynet start 2> /dev/null > /dev/null &
+			while ! pidof "lbrynet" > /dev/null; do
+				sleep 1
+			done
 			lbrynet_wait_full_start
-			sleep 2
+			sleep 1
 		else
 			print_error "Error: lbrynet is not running."
 			return 1
@@ -290,7 +303,7 @@ init_lbt_config() {
 			init_lbt_config
 			return
 		fi
-		lbrynet_check_error "$lbrynet_config"
+		lbrynet_validate "$lbrynet_config"
 		if lbt_config_bool 'cache_local_lbrynet_settings' true; then
 			mkdir -p "$CACHE_DIR"
 			printf '%s' "$lbrynet_config" > "$CACHE_DIR/local_lbrynet_settings.json"
@@ -327,7 +340,7 @@ api_validate_and_check_running() {
 	case "$1" in
 		# Quick heuristic...
 		\{*'"name": "ComponentsNotStartedError"'* )
-			# ...but double check syntax
+			# ...but double check
 			if printf '%s' "$result" | jq -e '.error.data.name == "ComponentsNotStartedError"' > /dev/null; then
 				return 1
 			fi
@@ -337,7 +350,7 @@ api_validate_and_check_running() {
 				return 1
 			else
 				print_error "$1"
-				exit 1
+				kill 0
 			fi
 			;;
 		# If starts with {, assume it's valid JSON, not gonna call jq
@@ -345,16 +358,18 @@ api_validate_and_check_running() {
 			return 0
 			;;
 		* )
-			printf_error "API error: '%s'" "$1"
-			exit 1
+			printf_error "API error: %s" "$1"
+			kill 0
 			;;
 	esac
 }
 
-lbrynet_resolve() {
-	api_call resolve '{
+lbrynet_resolve_url() {
+	result="$(api_call resolve '{
 		"urls": "'"$1"'"
-	}'
+	}')"
+	lbrynet_validate "$result"
+	printf '%s' "$result"
 }
 
 lbrynet_get() {
@@ -375,7 +390,7 @@ lbrynet_search_claim_id_local() {
 	claim_info="$(api_call file_list '{
 		"claim_id": "'"$claim_id"'"
 	}')"
-	lbrynet_check_error "$claim_info"
+	lbrynet_validate "$claim_info"
 
 	if [ "$(result_value "$claim_info" "total_items")" -ne 1 ]; then
 		print_error "Could not find claim with ID $claim_id among saved files"
@@ -389,7 +404,7 @@ lbrynet_search_claim_id() {
 	claim_info="$(api_call claim_search '{
 		"claim_id": "'"$claim_id"'"
 	}')"
-	lbrynet_check_error "$claim_info"
+	lbrynet_validate "$claim_info"
 
 	if [ "$(result_value "$claim_info" "total_items")" -ne 1 ]; then
 		print_error "Could not find claim with ID $claim_id"
@@ -508,7 +523,7 @@ download() {
 
 	while true; do
 		lbrynet_info="$(lbrynet_get_save "$1")"
-		lbrynet_check_error "$lbrynet_info"
+		lbrynet_validate "$lbrynet_info"
 
 		blobs_total="$(result_value "$lbrynet_info" "blobs_in_stream")"
 		blobs_completed="$(result_value "$lbrynet_info" "blobs_completed")"
@@ -524,7 +539,7 @@ download() {
 	while ! is_download_complete "$lbrynet_info"; do
 		# Wait for the file to get saved
 		lbrynet_info="$(lbrynet_get_save "$1")"
-		lbrynet_check_error "$lbrynet_info"
+		lbrynet_validate "$lbrynet_info"
 		
 		written_bytes="$(result_value "$lbrynet_info" "written_bytes")"
 		written_bytes="$(numfmt --to=iec-i "$written_bytes")"
@@ -699,7 +714,7 @@ lbt_open() {
 		print_info "Resolving $url..."
 	fi
 	lbrynet_info="$(lbrynet_get "$url")"
-	lbrynet_check_error "$lbrynet_info"
+	lbrynet_validate "$lbrynet_info"
 
 
 	mimetype=$(result_value "$lbrynet_info" "mime_type")
@@ -854,7 +869,7 @@ lbt_get() {
 		* )
 			url="$(normalize_lbry_url "$1")"
 			if [ -n "$resolve" ] && [ -z "$action" ]; then
-				url="$(lbrynet_resolve "$url" | to_first_result_value 'canonical_url')"
+				url="$(lbrynet_resolve_url "$url" | to_first_result_value 'canonical_url')"
 			elif [ "$url" != "$1" ]; then
 				print_info "Resolving $url..."
 			fi
@@ -876,7 +891,7 @@ lbt_get() {
 	fi
 
 	lbrynet_info="$(lbrynet_get "$url")"
-	lbrynet_check_error "$lbrynet_info"
+	lbrynet_validate "$lbrynet_info"
 
 
 
@@ -1273,7 +1288,7 @@ lbt_ls_do() {
 			"page": '"$page"', 
 			"page_size": 100'"$api_call_params"'
 		}')"
-		lbrynet_check_error "$list_info"
+		lbrynet_validate "$list_info"
 
 
 		# Filter LBRY data using jq, output properties line by line
@@ -1563,7 +1578,7 @@ lbt_rm_file() {
 		* )
 			url="$(normalize_lbry_url "$1")"
 			result="$(lbrynet_get "$url" | jq '.result')"
-			lbrynet_check_error "$result"
+			lbrynet_validate "$result"
 			;;
 	esac
 	if [ -n "$rm_color" ]; then
@@ -1597,7 +1612,7 @@ lbt_rm_lbrynet() {
 			;;
 		* )
 			url="$(normalize_lbry_url "$1")"
-			claim_id="$(lbrynet_resolve "$url" | to_first_result_value 'claim_id')"
+			claim_id="$(lbrynet_resolve_url "$url" | to_first_result_value 'claim_id')"
 			;;
 	esac
 	if [ -n "$rm_file" ]; then
@@ -1820,7 +1835,7 @@ lbt_feed() {
 				;;
 			* )
 				url="$(normalize_lbry_url "$channel")"
-				claim_id="$(lbrynet_resolve "$url" | to_first_result_value 'claim_id')"
+				claim_id="$(lbrynet_resolve_url "$url" | to_first_result_value 'claim_id')"
 				;;
 		esac
 		if [ -z "$channel_id_list" ]; then
@@ -1882,7 +1897,7 @@ lbt_feed() {
 			"no_totals": true,
 			"order_by": "release_time"
 		}')"
-		lbrynet_check_error "$claim_info"
+		lbrynet_validate "$claim_info"
 		printf '%s' "$claim_info" | jq --raw-output "$jq_command"
 		page=$((page + 1))
 	done | if [ -z "$feed_sfeed" ]; then
