@@ -6,7 +6,7 @@ set -o errexit
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/lbt"
 API_LBRY_COM="https://api.lbry.com"
-VERSION='2.3.1'
+VERSION='2.3.2'
 
 
 FORMAT_BOLD='\033[1m'
@@ -316,15 +316,16 @@ init_lbt_config() {
 
 api_call() {
 	if [ -n "$2" ]; then
-		result="$(curl --silent --show-error "$api_server" -d'{
+		post_data='{
 			"method": "'"$1"'",
 			"params": '"$2"'
-		}')"
+		}'
 	else
-		result="$(curl --silent --show-error "$api_server" -d'{ 
+		post_data='{
 			"method": "'"$1"'" 
-		}')"
+		}'
 	fi
+	result="$(curl --silent --show-error "$api_server" -d"$post_data")"
 
 	if ! api_validate_and_check_running "$result"; then
 		printf_info "LBRY daemon not fully started. Please wait"
@@ -366,7 +367,12 @@ api_validate_and_check_running() {
 
 lbrynet_resolve_url() {
 	result="$(api_call resolve '{
-		"urls": "'"$1"'"
+		"urls": "'"$1"'",
+		"include_purchase_receipt": false, 
+		"include_is_my_output": false, 
+		"include_sent_supports": false, 
+		"include_sent_tips": false, 
+		"include_received_tips": false
 	}')"
 	lbrynet_validate "$result"
 	printf '%s' "$result"
@@ -956,7 +962,7 @@ lbt_ls() {
 						ls_pretty=n
 						;;
 					* )
-						print_error "Unknown parameter for --pretty-print: $2"
+						print_error "Unknown parameter for --pretty: $2"
 						print_error "Available options: always, auto, never"
 						exit 1
 						;;
@@ -1475,9 +1481,9 @@ lbt_ls_do() {
 	| sed -E 's/"\w": //g; s/'"$TAB"'$//' \
 	| if [ "$ls_sort" = 'size' ]; then
 		if [ -n "$ls_reverse" ]; then
-			sort --reverse --numeric-sort --key="$size_column" --key="$((size_column + 1))"
+			sort --field-separator="$TAB" --numeric-sort --key="$size_column" --key="$((size_column + 1))" --reverse
 		else
-			sort --numeric-sort --key="$size_column" --key="$((size_column + 1))"
+			sort --field-separator="$TAB" --numeric-sort --key="$size_column" --key="$((size_column + 1))"
 		fi
 	else
 		tee
@@ -1610,9 +1616,14 @@ lbt_rm_lbrynet() {
 			result="$(lbrynet_search_claim_id_local "$claim_id")"
 			url="$(printf '%s' "$result" | jq '[.claim_name, .claim_id] | join(":")' --raw-output)"
 			;;
-		* )
+		*/* )
 			url="$(normalize_lbry_url "$1")"
 			claim_id="$(lbrynet_resolve_url "$url" | to_first_result_value 'claim_id')"
+			;;
+		* )
+			# not a URL - don't resolve, just delete by claim_name
+			claim_name="$1"
+			unset url
 			;;
 	esac
 	if [ -n "$rm_file" ]; then
@@ -1621,20 +1632,25 @@ lbt_rm_lbrynet() {
 		action_string='deleting blobs...'
 	fi
 	if [ -n "$rm_color" ]; then
-		printf_info "${FORMAT_CYAN}%s${FORMAT_RESET} - %s " "$url" "$action_string"
+		printf_info "${FORMAT_CYAN}%s${FORMAT_RESET} - %s " "${url:-$claim_name}" "$action_string"
 	else
-		printf_info '%s - %s ' "$url" "$action_string"
+		printf_info '%s - %s ' "${url:-$claim_name}" "$action_string"
 	fi
 	api_call_params='{
-		claim_id: "'"$claim_id"'",
-		delete_from_download_dir: '"$(if [ -n "$rm_file" ]; then 
+		'"$(if [ -n "$url" ]; then
+			printf '"claim_id": "%s"' "$claim_id"
+		else
+			printf '"claim_name": "%s"' "$claim_name"
+		fi)"',
+		"delete_all": true,
+		"delete_from_download_dir": '"$(if [ -n "$rm_file" ]; then 
 			echo 'true'
 		else 
 			echo 'false' 
-		fi)"',
+		fi)"'
 	}'
 	if api_call file_delete "$api_call_params" | grep -q '"result": false'; then
-		print_error "Failed. The associated claim ID might not be present in the local LBRY."
+		print_error "Failed. This claim might not exist, or might not be present in the local LBRY."
 		# print_error "$result"
 		exit 1
 	else
