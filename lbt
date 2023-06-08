@@ -63,6 +63,8 @@ EOF
 
 fi
 
+lbt_config=$(cat "$CONFIG_DIR/config.json")
+
 
 
 lbt_help_open() {
@@ -283,9 +285,7 @@ lbt_config_bool() {
 	[ "$value" = 'true' ]
 }
 
-init_lbt_config() {
-	lbt_config=$(cat "$CONFIG_DIR/config.json")
-
+init_lbrynet_config() {
 	if lbt_config_bool 'use_local_lbrynet' true; then
 		lbrynet_local=y
 
@@ -300,7 +300,7 @@ init_lbt_config() {
 			printf_info "LBRY daemon not fully started. Please wait"
 			lbrynet_wait_full_start
 
-			init_lbt_config
+			init_lbrynet_config
 			return
 		fi
 		lbrynet_validate "$lbrynet_config"
@@ -315,6 +315,9 @@ init_lbt_config() {
 }
 
 api_call() {
+	if [ -z "$api_server" ]; then
+		init_lbrynet_config
+	fi
 	if [ -n "$2" ]; then
 		post_data='{
 			"method": "'"$1"'",
@@ -712,8 +715,6 @@ lbt_open() {
 	fi
 
 
-	init_lbt_config
-
 	if [ -n "$is_claim_id" ]; then
 		print_info "Searching for claim ID... "
 		url="$(lbrynet_search_claim_id "$1" | to_json_value 'canonical_url')"
@@ -845,7 +846,7 @@ lbt_get() {
 
 	if [ -z "$resolve" ] && [ -z "$output_file" ] && [ -z "$allow_terminal" ] && [ -t 1 ]; then
 		print_info "Are you sure you want to print this data into a terminal?"
-		printf_info "\n(use the --terminal option to skip this)\033[F"
+		printf_info "\n(start lbt with the --terminal option to skip this)\033[F"
 		printf_info "Type 'y' to proceed, or 'n' to exit: "
 	
 		first_print=y
@@ -865,7 +866,6 @@ lbt_get() {
 	fi
 
 
-	init_lbt_config
 
 
 	case "$1" in
@@ -1182,9 +1182,6 @@ lbt_ls() {
 		lbt_help_ls
 		exit 0
 	fi
-
-
-	init_lbt_config
 
 
 	lbt_ls_do
@@ -1736,9 +1733,6 @@ lbt_rm() {
 		exit 1
 	fi
 
-
-	init_lbt_config
-
 	while [ -n "$1" ]; do
 		if [ -n "$rm_no_blobs" ]; then
 			lbt_rm_file "$1"
@@ -1818,9 +1812,6 @@ lbt_feed() {
 		exit 0
 	fi
 
-	
-
-	init_lbt_config
 
 	check_incompatible "$feed_sfeed" "$feed_sfeed_plain" "--sfeed" "--plain"
 	if [ -n "$feed_sfeed_plain" ]; then
@@ -2001,7 +1992,6 @@ lbt_version() {
 	fi
 	echo "LBRY daemon info:"
 
-	init_lbt_config
 	api_call version | jq '.result'
 }
 
