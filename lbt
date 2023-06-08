@@ -6,7 +6,7 @@ set -o errexit
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/lbt"
 API_LBRY_COM="https://api.lbry.com"
-VERSION='2.3.2'
+VERSION='2.3.3'
 
 
 FORMAT_BOLD='\033[1m'
