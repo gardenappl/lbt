@@ -214,6 +214,7 @@ lbrynet_validate() {
 
 lbrynet_wait_full_start() {
 	displayed_startup_count=0
+	printf_error "Initializing LBRY daemon, please wait"
 	while true; do
 		if ! pidof "lbrynet" > /dev/null; then
 			printf_error "\nError: LBRY daemon process is not running.\n"
@@ -255,16 +256,15 @@ lbrynet_quick_start_check() {
 				#shellcheck disable=SC2016
 				print_error 'Unable to find "lbrynet" executable in $PATH'
 				print_error "If you've installed LBRY on this system, see"
-				print_error "https://lbry.com/faq/how-to-cli for where to find lbrynet."
+				print_error "https://lbry.com/faq/how-to-cli for where to find lbrynet,"
+				#shellcheck disable=SC2016
+				print_error 'then add it to your $PATH'
 				return 1
 			fi
-			printf_info "Starting LBRY daemon, please wait"
 			setsid lbrynet start 2> /dev/null > /dev/null &
 			while ! pidof "lbrynet" > /dev/null; do
 				sleep 1
 			done
-			lbrynet_wait_full_start
-			sleep 1
 		else
 			print_error "Error: lbrynet is not running."
 			return 1
@@ -297,7 +297,6 @@ init_lbrynet_config() {
 			lbrynet_config=$(lbrynet settings get)
 		fi
 		if ! api_validate_and_check_running "$lbrynet_config"; then
-			printf_info "LBRY daemon not fully started. Please wait"
 			lbrynet_wait_full_start
 
 			init_lbrynet_config
@@ -328,16 +327,27 @@ api_call() {
 			"method": "'"$1"'" 
 		}'
 	fi
-	result="$(curl --silent --show-error "$api_server" -d"$post_data")"
+	result="$(api_wait_for_curl_and_call "$api_server" "$post_data")"
 
 	if ! api_validate_and_check_running "$result"; then
-		printf_info "LBRY daemon not fully started. Please wait"
 		lbrynet_wait_full_start
 		api_call "$1" "$2"
 		return
 	fi
 	
 	printf '%s' "$result"
+}
+
+api_wait_for_curl_and_call() {
+	set +o errexit
+	
+	curl --silent "$1" -d"$2"
+	while [ "$?" -eq 7 ]; do
+		# exit code 7: could not connect to host
+		sleep 1
+		curl --silent "$1" -d"$2"
+	done
+	set -o errexit
 }
 
 api_validate_and_check_running() {
@@ -1293,6 +1303,9 @@ lbt_ls_do() {
 		}')"
 		lbrynet_validate "$list_info"
 
+		total_pages="$(result_value "$list_info" "total_pages")"
+		print_info "Extracted page $page/$total_pages"
+
 
 		# Filter LBRY data using jq, output properties line by line
 		# Process them and combine them into one line
@@ -1302,16 +1315,6 @@ lbt_ls_do() {
 					passes_filters=y
 					continue
 					;;
-				\} )
-					if [ "$passes_filters" = y ]; then
-						printf '\tKEEP\n'
-					else
-						printf '\tDELETE\n'
-					fi
-					continue
-					;;
-			esac
-			case "$line" in
 				#claim ID
 				\"i\"* )
 					if [ "$ls_color" = y ]; then
@@ -1468,11 +1471,18 @@ lbt_ls_do() {
 						printf '%s' "$line"
 					fi
 					;;
+				\} )
+					if [ "$passes_filters" = y ]; then
+						printf '\tKEEP\n'
+					else
+						printf '\tDELETE\n'
+					fi
+					continue
+					;;
 			esac
 			printf '\t'
 		done 
 
-		total_pages="$(result_value "$list_info" "total_pages")"
 		page=$((page+1))
 	done \
 	| sed -E 's/"\w": //g; s/'"$TAB"'$//' \
