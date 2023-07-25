@@ -935,8 +935,8 @@ lbt_get() {
 }
 
 lbt_ls() {
-	options=nNPcfFNbmdeERT::sh::rl::tiq
-	longopts=help,no-path,absolute-path,channel,files,not-files,no-name,blobs,mime-type,full,empty,not-empty,color::,relative-path,table::,no-size,human-readable::,sort:,reverse,pretty::,no-time,claim-id,full-time,unix-time,quiet
+	options=nNPcfFNbmdeERT:sh:rl:tiq
+	longopts=help,no-path,absolute-path,channel,files,not-files,no-name,blobs,mime-type,full,empty,not-empty,color:,relative-path,table:,no-size,human-readable:,sort:,reverse,pretty:,no-time,claim-id,full-time,unix-time,quiet
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
 
@@ -960,9 +960,6 @@ lbt_ls() {
 				;;
 			-l|--pretty )
 				case "$2" in
-					"" )
-						ls_pretty=y
-						;;
 					always )
 						ls_pretty=y
 						;;
@@ -1017,9 +1014,6 @@ lbt_ls() {
 				;;
 			-h|--human-readable )
 				case "$2" in
-					"" )
-						ls_human=y
-						;;
 					always )
 						ls_human=y
 						;;
@@ -1042,9 +1036,6 @@ lbt_ls() {
 				;;
 			-T|--table )
 				case "$2" in
-					"" )
-						ls_table=y
-						;;
 					always )
 						ls_table=y
 						;;
@@ -1063,9 +1054,6 @@ lbt_ls() {
 				;;
 			--color )
 				case "$2" in
-					"" )
-						ls_color=y
-						;;
 					always )
 						ls_color=y
 						;;
@@ -1666,7 +1654,7 @@ lbt_rm_lbrynet() {
 }
 
 lbt_rm() {
-	options=hfnc::q
+	options=hfnc:q
 	longopts=help,file,no-blobs,color,quiet
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
@@ -1691,9 +1679,6 @@ lbt_rm() {
 				;;
 			-c|--color )
 				case "$2" in
-					"" )
-						rm_color=y
-						;;
 					always )
 						rm_color=y
 						;;
@@ -1756,8 +1741,8 @@ lbt_rm() {
 
 
 lbt_feed() {
-	options=hsp:n:c::Sdt
-	longopts=help,sfeed,start-page:,pages:,color::,plain,time
+	options=hsp:n:c:Sdt
+	longopts=help,sfeed,start-page:,pages:,color:,plain,time
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
 
@@ -1789,9 +1774,6 @@ lbt_feed() {
 				;;
 			-c|--color )
 				case "$2" in
-					"" )
-						feed_color=y
-						;;
 					always )
 						feed_color=y
 						;;
