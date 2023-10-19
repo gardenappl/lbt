@@ -6,7 +6,7 @@ set -o errexit
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/lbt"
 API_LBRY_COM="https://api.lbry.com"
-VERSION='2.3.4'
+VERSION='2.3.5'
 
 
 FORMAT_BOLD='\033[1m'
@@ -1199,7 +1199,7 @@ lbt_ls_do() {
 	# Download path must always be requested, so that we can later filter out
 	# --files or --not-files claims
 	columns="p: .download_path"
-	total_columns=1
+	total_columns=0
 	if [ -n "$ls_claim_id" ]; then
 		columns="i: .claim_id, $columns"
 		claim_id_column=1
@@ -1561,7 +1561,7 @@ lbt_ls_do() {
 		tee
 	fi \
 	| sed "/DELETE$/d; s/${TAB}KEEP$//" \
-	| if [ "$ls_table" = y ]; then
+	| if [ "$ls_table" = y ] && [ "$total_columns" -gt 1 ]; then
 		column --table --separator="$TAB" #--table-truncate "$name_column"
 	else
 		tee
