@@ -69,9 +69,13 @@ MIME type is text/markdown
 
 ### lbt get
 
-**lbt get** is a lower-level utility: instead of opening content with an appropriate program, it simply grabs the needed file from the network and pipes it out. It can also just print out a URL that other programs can use.
+**lbt get** is a lower-level utility: instead of opening content with an appropriate program, it simply grabs the needed file from the network and saves it locally. It can also just print out a URL that other programs can use.
 
 #### Examples:
+
+`lbt get 'https://odysee.com/@Odysee:8/futureofodysee:e'`
+
+saves [this](https://odysee.com/@Odysee:8/futureofodysee:e) document as `futureofodysee.md`.
 
 `lbt get "https://lbry.tv/@lbry:3f/julian-chandra-joins-lbry:8" | less`
 

@@ -6,7 +6,7 @@ set -o errexit
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/lbt"
 API_LBRY_COM="https://api.lbry.com"
-VERSION='3.0.1'
+VERSION='4.0.0'
 
 
 FORMAT_BOLD='\033[1m'
@@ -114,14 +114,14 @@ lbt_help_get() {
 "Usage: lbt get URL [options...]
    or  lbt get #CLAIM_ID [options...]
 
+	-C, --copy         Copy saved files instead of creating a sym-link
 	-f, --file         (When used with --resolve) Save content as a file and print download path
-	-F, --force-save   Save content as a file even if that's not needed
 	-h, --help         Print help
 	-O, --output FILE  Write output to FILE (or, if the content already exists on the local machine, create a sym-link)
+	-O, --output -     Write output to standard output
 	-q, --quiet        Don't output extra information, besides error messages
 	-r, --resolve      Instead of printing file to stdout, print canonical LBRY URL
-	-s, --stream       (When used with --resolve) Create HTTP stream and print its URL
-	-t, --terminal     Enable printing output to the terminal"
+	-s, --stream       (When used with --resolve) Create HTTP stream and print its URL"
 }
 
 lbt_help_feed() {
@@ -244,7 +244,7 @@ lbrynet_wait_full_start() {
 			print_info '. Done.'
 			break
 		else
-			sleep 1
+			sleep 3
 		fi
 	done
 }
@@ -286,6 +286,10 @@ lbt_config_bool() {
 }
 
 init_lbrynet_config() {
+	if [ -n "$api_server" ]; then
+		# Already initialized
+		return
+	fi
 	if lbt_config_bool 'use_local_lbrynet' true; then
 		lbrynet_local=y
 
@@ -314,9 +318,7 @@ init_lbrynet_config() {
 }
 
 api_call() {
-	if [ -z "$api_server" ]; then
-		init_lbrynet_config
-	fi
+	init_lbrynet_config
 	if [ -n "$2" ]; then
 		post_data='{
 			"method": "'"$1"'",
@@ -748,15 +750,16 @@ lbt_open() {
 
 
 output_to_file() {
+	init_lbrynet_config
 	if [ "$lbrynet_local" = y ] && is_download_complete "$2"; then
 		download_path=$(result_value "$2" "download_path")
-		if [ -n "$force_save" ]; then
-			printf_info "Copying from %s... " "$download_path"
+		if [ -n "$force_copy" ]; then
+			printf_info "Copying from %s to %s... " "$download_path" "$1"
 			cp "$download_path" "$1"
 			print_info "Done."
 		else
-			ln -s "$download_path" "$1"
-			printf_info "Created symlink from %s to %s" "$1" "$download_path"
+			ln -sf "$download_path" "$1"
+			printf_info "Created symlink to %s from %s" "$1" "$download_path"
 		fi
 		exit 0
 	fi
@@ -772,7 +775,7 @@ output_to_file() {
 
 lbt_get() {
 	options=rhfstO:o:Fq
-	longopts=resolve,help,file,stream,terminal,output:,force-save,quiet
+	longopts=resolve,help,file,stream,terminal,output:,force-save,copy,quiet
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
 	
@@ -795,7 +798,9 @@ lbt_get() {
 				shift
 				;;
 			-t|--terminal)
-				allow_terminal=y
+				print_info "Warning: the --terminal option is deprecated."
+				print_info "lbt get will save its output into a file by default, unless it's piped into another program."
+				print_info "use 'lbt get --output -' to print to standard output."
 				shift
 				;;
 			-o|-O|--output)
@@ -803,7 +808,12 @@ lbt_get() {
 				shift 2
 				;;
 			-F|--force-save)
-				force_save=y
+				print_info "Warning: the --force-save option is deprecated."
+				print_info "Use -C or --copy instead."
+				shift
+				;;
+			-C|--copy)
+				force_copy=y
 				shift
 				;;
 			-q|--quiet)
@@ -824,10 +834,6 @@ lbt_get() {
 	if [ -n "$help" ]; then
 		lbt_help_get
 		exit 0
-	fi
-
-	if [ -n "$quiet" ]; then
-		allow_terminal=y
 	fi
 
 	if [ -z "$1" ]; then
@@ -854,29 +860,6 @@ lbt_get() {
 		fi
 	fi
 
-	if [ -z "$resolve" ] && [ -z "$output_file" ] && [ -z "$allow_terminal" ] && [ -t 1 ]; then
-		print_info "Are you sure you want to print this data into a terminal?"
-		printf_info "\n(start lbt with the --terminal option to skip this)\033[F"
-		printf_info "Type 'y' to proceed, or 'n' to exit: "
-	
-		first_print=y
-		while read -r result; do
-			if [ -n "$first_print" ]; then
-				printf_info '\n'
-				unset first_print
-			fi
-
-			if [ "$result" = y ]; then
-				break
-			elif [ "$result" = n ]; then
-				exit 0
-			fi
-			printf_info "Type 'y' to proceed, or 'n' to exit: "
-		done
-	fi
-
-
-
 
 	case "$1" in
 		\#* )
@@ -893,8 +876,6 @@ lbt_get() {
 	esac
 
 
-
-
 	if [ -n "$is_claim_id" ]; then
 		print_info "Searching for claim ID... "
 		url="$(lbrynet_search_claim_id "$1" | to_json_value 'canonical_url')"
@@ -909,7 +890,11 @@ lbt_get() {
 	lbrynet_info="$(lbrynet_get "$url")"
 	lbrynet_validate "$lbrynet_info"
 
-
+	if [ -t 1 ] && [ -z "$output_file" ] && [ -z "$resolve" ]; then
+		output_file="$(result_value "$lbrynet_info" 'suggested_file_name')"
+	elif [ "$output_file" = '-' ]; then
+		unset output_file
+	fi
 
 	if [ -n "$output_file" ]; then
 		output_to_file "$output_file" "$lbrynet_info"
