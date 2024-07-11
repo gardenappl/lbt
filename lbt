@@ -1,4 +1,5 @@
 #!/bin/sh
+VERSION='4.0.1'
 
 set -o errexit
 
@@ -6,7 +7,6 @@ set -o errexit
 CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/lbt"
 CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/lbt"
 API_LBRY_COM="https://api.lbry.com"
-VERSION='4.0.0'
 
 
 FORMAT_BOLD='\033[1m'
@@ -774,7 +774,7 @@ output_to_file() {
 
 
 lbt_get() {
-	options=rhfstO:o:Fq
+	options=rhfstO:o:FCq
 	longopts=resolve,help,file,stream,terminal,output:,force-save,copy,quiet
 	parsed=$(getopt --options=$options --longoptions=$longopts --name "$0" -- "$@")
 	eval set -- "$parsed"
@@ -810,6 +810,7 @@ lbt_get() {
 			-F|--force-save)
 				print_info "Warning: the --force-save option is deprecated."
 				print_info "Use -C or --copy instead."
+				force_copy=y
 				shift
 				;;
 			-C|--copy)
